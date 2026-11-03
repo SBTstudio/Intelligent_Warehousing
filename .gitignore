@@ -10,6 +10,7 @@ __pycache__/
 build/
 dist/
 *.spec
+!packaging/SmartWMS.spec
 *.egg-info/
 
 # 数据库与缓存（示例 CSV 需要提交，app.db 不提交）
