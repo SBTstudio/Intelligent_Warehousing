@@ -26,11 +26,12 @@ from PySide6.QtWidgets import (
 
 from app.core import ingest
 from app.db import schema
+from app.paths import sample_dir
 from app.ui.base_page import WorkPage
 from app.ui.helpers import fill_table, hint_label, pill, setup_table, style_pill
 from app.ui.theme import COLORS
 
-SAMPLE_DIR = Path(__file__).resolve().parents[2] / "data" / "sample"
+SAMPLE_DIR = sample_dir()
 
 PREVIEW_COLUMNS = {
     "receipt": [

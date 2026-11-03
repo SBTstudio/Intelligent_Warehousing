@@ -31,13 +31,16 @@ def _unhide_macos_qt_plugins() -> None:
     if sys.platform != "darwin":
         return
     try:
-        plugin_dir = (
-            Path(sysconfig.get_paths()["purelib"])
-            / "PySide6"
-            / "Qt"
-            / "plugins"
-            / "platforms"
-        )
+        if is_frozen():
+            plugin_dir = resource_path("PySide6", "Qt", "plugins", "platforms")
+        else:
+            plugin_dir = (
+                Path(sysconfig.get_paths()["purelib"])
+                / "PySide6"
+                / "Qt"
+                / "plugins"
+                / "platforms"
+            )
         for path in plugin_dir.glob("*.dylib"):
             flags = os.stat(path).st_flags
             if flags & stat.UF_HIDDEN:
@@ -53,6 +56,7 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from app.db import schema
+from app.paths import is_frozen, resource_path
 from app.ui.main_window import MainWindow
 from app.ui.theme import apply_theme
 
@@ -64,7 +68,7 @@ def main() -> int:
     app.setOrganizationName("SBTstudio")
     apply_theme(app)
 
-    icon_path = Path(__file__).resolve().parent / "assets" / "app_icon.svg"
+    icon_path = resource_path("assets", "app_icon.svg")
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
 

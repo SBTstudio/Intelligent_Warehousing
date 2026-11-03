@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import contextlib
-from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIcon
@@ -21,6 +20,7 @@ from PySide6.QtWidgets import (
 
 from app.db import schema
 from app.llm import tasks
+from app.paths import resource_path
 from app.ui.page_basket import BasketPage
 from app.ui.page_import import ImportPage
 from app.ui.page_replenish import ReplenishPage
@@ -40,7 +40,7 @@ class MainWindow(QMainWindow):
         self.resize(1320, 840)
         self.setMinimumSize(1120, 740)
 
-        icon_path = Path(__file__).resolve().parents[2] / "assets" / "app_icon.svg"
+        icon_path = resource_path("assets", "app_icon.svg")
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
 

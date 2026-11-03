@@ -23,7 +23,10 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parents[2] / "data" / "app.db"
+from app.paths import db_path
+
+# 源码运行时在 <项目>/data/app.db；打包后写到用户数据目录
+DB_PATH = db_path()
 
 # ---------------------------------------------------------------
 # 建表语句

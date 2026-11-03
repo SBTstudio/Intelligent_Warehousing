@@ -3,6 +3,29 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.0.1] - 2026-11-03
+
+打包版本：源码功能与 1.0.0 一致，新增 Windows exe 与 macOS dmg。
+
+### Added
+
+- PyInstaller 打包配置：`packaging/SmartWMS.spec`、`packaging/build_windows.bat`、`packaging/build_macos.sh`
+- 跨平台路径模块 `app/paths.py`：打包后数据库写入用户数据目录，示例数据从 `_MEIPASS` 读取
+- 应用图标 `assets/icon.png` / `icon.ico` / `icon.icns`
+- GitHub Actions `release-packages` 工作流：在 Windows / macOS runner 上构建并上传 Release 资产
+- README 直接下载入口
+
+### Changed
+
+- 数据库默认位置：源码运行仍在 `data/app.db`；安装包改为
+  `%LOCALAPPDATA%\SmartWMS\app.db` / `~/Library/Application Support/SmartWMS/app.db`
+- matplotlib 缓存改为用户数据目录
+
+### Builds
+
+- `SmartWMS-Windows-x64.exe`（Windows 10/11 x64，单文件）
+- `SmartWMS-macOS-arm64.dmg`（Apple Silicon）
+
 ## [1.0.0] - 2026-11-03
 
 首个完整版本。五个功能页面全部接线，算法 / 数据 / LLM / 界面均有测试或手工验收覆盖。

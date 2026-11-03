@@ -12,11 +12,11 @@ from __future__ import annotations
 
 import contextlib
 import os
-from pathlib import Path
 
-# 沙箱 / 只读 HOME 环境下 matplotlib 无法写 ~/.matplotlib，指定项目内缓存目录
-_CACHE = Path(__file__).resolve().parents[3] / "data" / ".mplcache"
-_CACHE.mkdir(parents=True, exist_ok=True)
+from app.paths import mpl_cache_dir
+
+# 沙箱 / 只读 HOME 环境下 matplotlib 无法写 ~/.matplotlib，指定可写缓存目录
+_CACHE = mpl_cache_dir()
 os.environ.setdefault("MPLCONFIGDIR", str(_CACHE))
 
 import matplotlib  # noqa: E402

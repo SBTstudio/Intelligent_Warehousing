@@ -12,13 +12,31 @@
 ![Ollama](https://img.shields.io/badge/Ollama-local%20LLM-111111)
 ![Tests](https://img.shields.io/badge/tests-53%20passed-brightgreen)
 [![Actions](https://github.com/SBTstudio/Intelligent_Warehousing/actions/workflows/tests.yml/badge.svg)](https://github.com/SBTstudio/Intelligent_Warehousing/actions/workflows/tests.yml)
+[![Release](https://img.shields.io/github/v/release/SBTstudio/Intelligent_Warehousing)](https://github.com/SBTstudio/Intelligent_Warehousing/releases/latest)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-[功能](#-功能一览) · [截图](#-界面预览) · [快速开始](#-快速开始) · [算法](#-核心算法) · [文档](#-文档) · [发布说明](docs/RELEASE_v1.0.0.md)
+[功能](#-功能一览) · [截图](#-界面预览) · [快速开始](#-快速开始) · [算法](#-核心算法) · [文档](#-文档) · [发布说明](docs/RELEASE_v1.0.1.md)
 
 </div>
 
 ![智能仓储管理系统 - 购物篮分析](preview.png)
+
+---
+
+## 📦 直接下载（不需要 Python）
+
+| 平台 | 安装包 | 说明 |
+|---|---|---|
+| **Windows 10/11 x64** | [SmartWMS-Windows-x64.exe](https://github.com/SBTstudio/Intelligent_Warehousing/releases/latest) | 免安装单文件，双击运行 |
+| **macOS Apple Silicon** | [SmartWMS-macOS-arm64.dmg](https://github.com/SBTstudio/Intelligent_Warehousing/releases/latest) | 打开后拖进 Applications |
+
+> 安装包已内置示例数据，首次打开点「一键载入示例数据」即可。
+> Ollama 仍是可选项；不装也能用全部统计、图表、补货功能。
+>
+> 没有签名，Windows SmartScreen / macOS Gatekeeper 可能提示"未知开发者"，
+> 选择「仍要运行」或右键 App → 打开即可。
+>
+> 其他平台或想改代码，按下面的[源码运行](#-快速开始)方式安装。
 
 ---
 
@@ -423,7 +441,8 @@ S001,青岛啤酒,饮料,3.20,5.50
 | [功能拆解与开发路线](docs/功能拆解与开发路线.md) | 历史规划与工时 |
 | [开发分工与进度](docs/开发分工与进度.md) | 两人分工、复盘、答辩分工 |
 | [5 分钟演示脚本](docs/演示脚本.md) | 答辩现场演示流程与追问答案 |
-| [发布说明 v1.0.0](docs/RELEASE_v1.0.0.md) | GitHub Release 文案 |
+| [发布说明 v1.0.1](docs/RELEASE_v1.0.1.md) | Windows / macOS 安装包 |
+| [发布说明 v1.0.0](docs/RELEASE_v1.0.0.md) | 首个完整版本 |
 | [原始需求 docx](docs/智能仓储需求分析文档.docx) | 课程原始文档 |
 
 ---

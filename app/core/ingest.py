@@ -25,6 +25,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from app.paths import sample_dir
+
 # 允许的文件编码，按顺序尝试
 ENCODINGS = ("utf-8-sig", "utf-8", "gbk")
 
@@ -540,7 +542,7 @@ def load_sample() -> tuple[list[dict], list[dict]]:
 
     返回 (小票记录, 库存记录)
     """
-    sample_dir = Path(__file__).resolve().parents[2] / "data" / "sample"
-    receipt = validate_receipt(sample_dir / "receipts.csv")
-    inventory = validate_inventory(sample_dir / "inventory.csv")
+    directory = sample_dir()
+    receipt = validate_receipt(directory / "receipts.csv")
+    inventory = validate_inventory(directory / "inventory.csv")
     return receipt.rows, inventory.rows
