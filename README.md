@@ -27,8 +27,8 @@
 
 | 平台 | 安装包 | 说明 |
 |---|---|---|
-| **Windows 10/11 x64** | [SmartWMS-Windows-x64.exe](https://github.com/SBTstudio/Intelligent_Warehousing/releases/latest) | 免安装单文件，双击运行 |
-| **macOS Apple Silicon** | [SmartWMS-macOS-arm64.dmg](https://github.com/SBTstudio/Intelligent_Warehousing/releases/latest) | 打开后拖进 Applications |
+| **Windows 10/11 x64** | [SmartWMS-Windows-x64.exe](https://github.com/SBTstudio/Intelligent_Warehousing/releases/latest/download/SmartWMS-Windows-x64.exe) | 免安装单文件，双击运行 |
+| **macOS Apple Silicon** | [SmartWMS-macOS-arm64.dmg](https://github.com/SBTstudio/Intelligent_Warehousing/releases/latest/download/SmartWMS-macOS-arm64.dmg) | 打开后拖进 Applications |
 
 > 安装包已内置示例数据，首次打开点「一键载入示例数据」即可。
 > Ollama 仍是可选项；不装也能用全部统计、图表、补货功能。

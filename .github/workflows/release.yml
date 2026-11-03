@@ -35,13 +35,16 @@ jobs:
         run: |
           python -m PyInstaller --noconfirm --clean --onefile --windowed --name SmartWMS --icon assets/icon.ico --add-data "data/sample;data/sample" --add-data "assets;assets" --hidden-import matplotlib.backends.backend_qtagg --hidden-import PySide6.QtSvg --exclude-module pandas --exclude-module tkinter main.py
 
+      - name: Rename artifact
+        run: Move-Item -Force dist/SmartWMS.exe dist/SmartWMS-Windows-x64.exe
+
       - name: Show result
         run: dir dist
 
       - uses: actions/upload-artifact@v4
         with:
           name: SmartWMS-Windows-x64
-          path: dist/SmartWMS.exe
+          path: dist/SmartWMS-Windows-x64.exe
           if-no-files-found: error
 
   macos-dmg:
@@ -106,7 +109,7 @@ jobs:
           name: "v1.0.1 — Windows / macOS 安装包"
           body_path: docs/RELEASE_v1.0.1.md
           files: |
-            artifacts/SmartWMS.exe
+            artifacts/SmartWMS-Windows-x64.exe
             artifacts/SmartWMS-macOS-arm64.dmg
           fail_on_unmatched_files: true
           make_latest: true
