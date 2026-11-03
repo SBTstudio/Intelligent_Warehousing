@@ -13,3 +13,6 @@ ignore = [
 
 [lint.isort]
 known-first-party = ["app"]
+
+[lint.per-file-ignores]
+"main.py" = ["E402"]  # 先修复 macOS Qt 插件可见性，再导入 PySide6

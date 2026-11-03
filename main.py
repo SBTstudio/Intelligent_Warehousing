@@ -11,11 +11,43 @@
 
 from __future__ import annotations
 
+import os
+import stat
 import sys
+import sysconfig
 from pathlib import Path
 
 # 保证以项目根目录为基准导入 app 包
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+
+def _unhide_macos_qt_plugins() -> None:
+    """修复 macOS 上 Qt 平台插件被同步/沙箱工具打上 hidden 标志的问题。
+
+    Qt 的 QFactoryLoader 默认跳过隐藏文件，插件被加上 UF_HIDDEN 后会报
+    "Could not find the Qt platform plugin"。这里只清掉 hidden 标志，
+    不改动其他文件属性；非 macOS 直接跳过。
+    """
+    if sys.platform != "darwin":
+        return
+    try:
+        plugin_dir = (
+            Path(sysconfig.get_paths()["purelib"])
+            / "PySide6"
+            / "Qt"
+            / "plugins"
+            / "platforms"
+        )
+        for path in plugin_dir.glob("*.dylib"):
+            flags = os.stat(path).st_flags
+            if flags & stat.UF_HIDDEN:
+                os.chflags(path, flags & ~stat.UF_HIDDEN)
+    except Exception:
+        # 权限不足或没有插件目录时不影响正常启动
+        pass
+
+
+_unhide_macos_qt_plugins()
 
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
