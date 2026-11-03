@@ -11,6 +11,7 @@
 ![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite&logoColor=white)
 ![Ollama](https://img.shields.io/badge/Ollama-local%20LLM-111111)
 ![Tests](https://img.shields.io/badge/tests-53%20passed-brightgreen)
+[![Actions](https://github.com/SBTstudio/Intelligent_Warehousing/actions/workflows/tests.yml/badge.svg)](https://github.com/SBTstudio/Intelligent_Warehousing/actions/workflows/tests.yml)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 [功能](#-功能一览) · [截图](#-界面预览) · [快速开始](#-快速开始) · [算法](#-核心算法) · [文档](#-文档) · [发布说明](docs/RELEASE_v1.0.0.md)

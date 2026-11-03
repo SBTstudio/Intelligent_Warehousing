@@ -1,6 +1,3 @@
-# CI 模板：复制到 .github/workflows/tests.yml 后提交。
-# 推送带 workflow 文件的提交需要 OAuth token 具备 workflow scope。
-
 name: tests
 
 on:
