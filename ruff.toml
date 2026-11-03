@@ -1,0 +1,15 @@
+line-length = 120
+target-version = "py310"
+
+[lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+ignore = [
+    "E501",   # 中文注释/文档字符串较多，不强制 88 列
+    "UP036",  # check_env 里故意对过新 Python 给提示
+    "B905",   # zip(strict=) 会破坏 3.9 兼容性
+    "SIM102", # 嵌套 if 有时更易读
+    "SIM114", # 多个 if 分支拼接测试数据时更直观
+]
+
+[lint.isort]
+known-first-party = ["app"]

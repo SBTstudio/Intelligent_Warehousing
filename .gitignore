@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+.tools/
+build/
+dist/
+*.spec
+*.egg-info/
+
+# 数据库与缓存（示例 CSV 需要提交，app.db 不提交）
+data/app.db
+data/app.db-*
+data/bench.db
+data/bench.db-*
+data/benchmark_output.txt
+data/.mplcache/
+backup_*.db
+
+# 编辑器 / 系统
+.DS_Store
+.idea/
+.vscode/
+*.swp
