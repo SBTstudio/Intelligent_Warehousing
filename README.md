@@ -16,7 +16,7 @@
 [![Release](https://img.shields.io/github/v/release/SBTstudio/Intelligent_Warehousing)](https://github.com/SBTstudio/Intelligent_Warehousing/releases/latest)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-[功能](#-功能一览) · [截图](#-界面预览) · [快速开始](#-快速开始) · [算法](#-核心算法) · [文档](#-文档) · [发布说明](docs/RELEASE_v1.0.2.md)
+[功能](#功能一览) · [截图](#界面预览) · [快速开始](#快速开始) · [算法](#核心算法) · [文档](#文档) · [发布说明](docs/RELEASE_v1.0.2.md)
 
 </div>
 
@@ -247,7 +247,7 @@ MoM = (本月 − 上月) / 上月
 
 ---
 
-## 🤖 LLM 接入工程
+## LLM 接入工程
 
 这一层最值得说的是**怎么让 4B 模型在可接受时间内返回合法 JSON**。
 
@@ -367,7 +367,7 @@ Intelligent_Warehousing/
 
 ---
 
-## ✅ 测试
+## 测试
 
 ```bash
 pytest -q
@@ -423,7 +423,7 @@ S001,青岛啤酒,饮料,3.20,5.50
 
 ---
 
-## ⚙️ 参数配置
+## 参数配置
 
 | 参数 | 默认 | 作用 |
 |---|---:|---|
