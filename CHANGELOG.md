@@ -3,6 +3,36 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.0.2] - 2026-11-11
+
+新增第三方 OpenAI 兼容 API，作为 Ollama 本地模型的显式可选替代。
+
+### Added
+
+- `app/llm/client.py` 支持两种模型来源：
+  - Ollama 本地模型（默认，数据不出本机）
+  - 第三方 OpenAI 兼容 API（DeepSeek / 通义千问 / OpenAI / Moonshot 等）
+- 第三方 API 适配：
+  - `POST {base_url}/chat/completions`，Bearer Key；
+  - JSON 任务使用 `response_format`，不支持时自动去掉重试；
+  - 支持 `401/403/429/404/超时/连接失败` 分类提示。
+- 「参数配置」页新增模型来源、Base URL、API 模型名、API Key、请求超时、
+  「测试连接」按钮和隐私提示。
+- 支持环境变量 `SMARTWMS_API_KEY` 覆盖数据库中的 Key。
+- `pytest` 新增 8 个第三方 API 用例，总数 61。
+
+### Changed
+
+- 状态栏、报告页、健康检查按当前模型来源显示"本地模型"或"第三方 API"。
+- 第三方 API 只接收算法层聚合摘要，不上传原始 CSV / 数据库。
+- 版本号更新到 v1.0.2。
+
+### Security
+
+- 默认仍为本地 Ollama，不联网；
+- 第三方 API 必须由用户显式切换；
+- API Key 可保存在本机 SQLite，也可用环境变量避免落盘。
+
 ## [1.0.1] - 2026-11-03
 
 打包版本：源码功能与 1.0.0 一致，新增 Windows exe 与 macOS dmg。
@@ -73,4 +103,6 @@
 - 暂未打包 exe / dmg。
 - 示例数据日销量波动较大，XYZ 分类多为 Z；文档中已说明。
 
+[1.0.2]: https://github.com/SBTstudio/Intelligent_Warehousing/releases/tag/v1.0.2
+[1.0.1]: https://github.com/SBTstudio/Intelligent_Warehousing/releases/tag/v1.0.1
 [1.0.0]: https://github.com/SBTstudio/Intelligent_Warehousing/releases/tag/v1.0.0

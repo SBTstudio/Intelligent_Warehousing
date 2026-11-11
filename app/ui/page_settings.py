@@ -5,10 +5,15 @@
 
 配置保存在 SQLite 的 config 表里，重启程序后自动回填；
 保存后通过 config_changed 信号通知补货页和报告页重新计算。
+
+模型来源支持两种：
+    1. Ollama 本地模型（默认，数据不出本机）
+    2. 第三方 OpenAI 兼容 API（显式开启，聚合摘要会发送到服务商）
 """
 
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -21,6 +26,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
@@ -29,13 +35,21 @@ from PySide6.QtWidgets import (
 
 from app.core import replenish
 from app.db import schema
-from app.llm.client import get_client
+from app.llm.client import (
+    PROVIDER_OLLAMA,
+    PROVIDER_OPENAI,
+    LLMClient,
+    LLMConfig,
+    apply_config,
+)
 from app.ui.base_page import WorkPage
 from app.ui.helpers import hint_label, pill, style_pill
 from app.ui.theme import COLORS
 from app.ui.worker import FunctionWorker
 
 MODEL_CHOICES = ["qwen3:4b", "qwen3:8b", "qwen3:1.7b", "qwen3:0.6b"]
+DEFAULT_API_BASE = "https://api.deepseek.com/v1"
+DEFAULT_API_MODEL = "deepseek-chat"
 
 
 class SettingsPage(WorkPage):
@@ -44,11 +58,12 @@ class SettingsPage(WorkPage):
     def __init__(self):
         super().__init__(
             "参数配置",
-            "按店铺实际经营情况调整业务参数，保存后参与后续运算。"
-            "所有参数保存在本地 SQLite 中，不会上传到任何服务器。",
+            "业务参数与模型配置保存在本地 SQLite。默认使用本地 Ollama；"
+            "只有显式选择第三方 API 时，聚合摘要才会发送到对应服务商。",
         )
         self.setWindowTitle("参数配置")
         self._model_worker: FunctionWorker | None = None
+        self._probe_populate = False
 
         card = QWidget()
         card.setObjectName("Card")
@@ -95,6 +110,12 @@ class SettingsPage(WorkPage):
         self.sp_slow_days.setSuffix(" 天")
         form.addRow("滞销判定周转天数阈值", self.sp_slow_days)
 
+        self.cb_provider = QComboBox()
+        self.cb_provider.addItem("Ollama 本地模型（数据不出本机）", PROVIDER_OLLAMA)
+        self.cb_provider.addItem("第三方 OpenAI 兼容 API", PROVIDER_OPENAI)
+        self.cb_provider.currentIndexChanged.connect(self._on_provider_changed)
+        form.addRow("模型来源", self.cb_provider)
+
         self.cb_model = QComboBox()
         self.cb_model.setEditable(True)
         self.cb_model.addItems(MODEL_CHOICES)
@@ -102,6 +123,73 @@ class SettingsPage(WorkPage):
         form.addRow("本地模型档位", self.cb_model)
 
         card_layout.addLayout(form)
+
+        # ---------- 第三方 API 配置 ----------
+        self.api_box = QWidget()
+        self.api_box.setObjectName("ApiBox")
+        self.api_box.setStyleSheet(
+            "QWidget#ApiBox { background: #F8F7F2; border: 1px solid #E8E5DA;"
+            " border-radius: 8px; }"
+        )
+        api_layout = QVBoxLayout(self.api_box)
+        api_layout.setContentsMargins(14, 12, 14, 12)
+        api_layout.setSpacing(8)
+
+        api_title = QLabel("第三方 OpenAI 兼容 API")
+        api_title.setObjectName("SectionTitle")
+        api_layout.addWidget(api_title)
+
+        api_form = QFormLayout()
+        api_form.setSpacing(10)
+        api_form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.ed_api_base = QLineEdit()
+        self.ed_api_base.setPlaceholderText("https://api.deepseek.com/v1")
+        api_form.addRow("Base URL", self.ed_api_base)
+
+        self.cb_api_model = QComboBox()
+        self.cb_api_model.setEditable(True)
+        self.cb_api_model.setMinimumWidth(220)
+        self.cb_api_model.addItems(
+            ["deepseek-chat", "qwen-plus", "gpt-4o-mini", "moonshot-v1-8k"]
+        )
+        api_form.addRow("API 模型名", self.cb_api_model)
+
+        self.ed_api_key = QLineEdit()
+        self.ed_api_key.setEchoMode(QLineEdit.Password)
+        self.ed_api_key.setPlaceholderText("sk-...（可留空，改用环境变量 SMARTWMS_API_KEY）")
+        api_form.addRow("API Key", self.ed_api_key)
+
+        self.sp_api_timeout = QSpinBox()
+        self.sp_api_timeout.setRange(10, 300)
+        self.sp_api_timeout.setSuffix(" 秒")
+        self.sp_api_timeout.setValue(60)
+        api_form.addRow("请求超时", self.sp_api_timeout)
+
+        probe_row = QWidget()
+        probe_layout = QHBoxLayout(probe_row)
+        probe_layout.setContentsMargins(0, 0, 0, 0)
+        probe_layout.setSpacing(8)
+        self.btn_test = QPushButton("测试连接")
+        self.btn_test.setProperty("variant", "ghost")
+        self.btn_test.clicked.connect(self._test_connection)
+        probe_layout.addWidget(self.btn_test)
+        self.lbl_api_status = hint_label("")
+        probe_layout.addWidget(self.lbl_api_status, 1)
+        api_form.addRow("", probe_row)
+
+        api_layout.addLayout(api_form)
+
+        self.lbl_api_note = hint_label(
+            "隐私提示：第三方 API 只接收聚合后的统计摘要（SKU 数、销售额、补货行等），"
+            "不上传原始 CSV。API Key 会明文保存在本机 SQLite；公用电脑建议使用环境变量 "
+            "SMARTWMS_API_KEY 覆盖。"
+        )
+        self.lbl_api_note.setStyleSheet(f"color: {COLORS['amber']}; font-size: 11px;")
+        self.lbl_api_note.setWordWrap(True)
+        api_layout.addWidget(self.lbl_api_note)
+
+        card_layout.addWidget(self.api_box)
 
         self.lbl_hint = hint_label("")
         self.lbl_hint.setStyleSheet(f"color: {COLORS['muted']}; font-size: 12px;")
@@ -142,7 +230,7 @@ class SettingsPage(WorkPage):
 
         self.btn_save.clicked.connect(self._save)
         self.btn_restore.clicked.connect(self._restore)
-        self.btn_models.clicked.connect(self._refresh_models)
+        self.btn_models.clicked.connect(lambda: self._run_probe(populate=True))
         self.btn_backup.clicked.connect(self._backup)
         self.btn_dir.clicked.connect(self._open_dir)
         self.sp_service_level.valueChanged.connect(self._update_hint)
@@ -151,26 +239,57 @@ class SettingsPage(WorkPage):
         self._refresh_stats()
 
     # ==========================================================
+    # 配置读写
+    # ==========================================================
     def _load_config(self) -> None:
         try:
             config = schema.get_config()
         except Exception:
             config = dict(schema.DEFAULT_CONFIG)
+
         self.sp_replenish_days.setValue(int(float(config.get("replenish_days", 7))))
         self.sp_lead_time.setValue(int(float(config.get("lead_time_days", 3))))
         self.sp_service_level.setValue(float(config.get("service_level", 0.95)))
         self.sp_min_support.setValue(float(config.get("min_support", 0.010)))
         self.sp_slow_days.setValue(int(float(config.get("slow_turnover_days", 45))))
+
+        provider = str(config.get("llm_provider", PROVIDER_OLLAMA))
+        index = self.cb_provider.findData(provider)
+        self.cb_provider.setCurrentIndex(index if index >= 0 else 0)
+
         model = config.get("model", "qwen3:4b")
         if model:
-            index = self.cb_model.findText(model)
-            if index >= 0:
-                self.cb_model.setCurrentIndex(index)
+            idx = self.cb_model.findText(model)
+            if idx >= 0:
+                self.cb_model.setCurrentIndex(idx)
             else:
                 self.cb_model.setEditText(model)
+
+        self.ed_api_base.setText(str(config.get("api_base_url", DEFAULT_API_BASE)))
+        self.cb_api_model.setCurrentText(str(config.get("api_model", DEFAULT_API_MODEL)))
+        self.ed_api_key.setText(str(config.get("api_key", "")))
+        try:
+            self.sp_api_timeout.setValue(int(float(config.get("api_timeout", 60))))
+        except (TypeError, ValueError):
+            self.sp_api_timeout.setValue(60)
+
+        self._on_provider_changed()
         self._update_hint()
 
+    def _on_provider_changed(self, *args) -> None:
+        is_api = self.cb_provider.currentData() == PROVIDER_OPENAI
+        self.api_box.setVisible(is_api)
+        if is_api:
+            self.lbl_hint.setText(
+                "已选择第三方 API：报告生成会把聚合摘要发送到填写的服务商；"
+                "库存、补货、分类仍在本机计算。"
+            )
+        else:
+            self._update_hint()
+
     def _update_hint(self) -> None:
+        if self.cb_provider.currentData() == PROVIDER_OPENAI:
+            return
         try:
             z = replenish.z_for(self.sp_service_level.value())
         except Exception:
@@ -180,7 +299,32 @@ class SettingsPage(WorkPage):
             " 补货量 = 日均销量 ×（到货提前期 + 补货周期）+ 安全库存 − 现有库存。"
         )
 
+    def _config_from_form(self) -> LLMConfig:
+        return LLMConfig(
+            model=self.cb_model.currentText().strip() or "qwen3:4b",
+            provider=self.cb_provider.currentData() or PROVIDER_OLLAMA,
+            api_base_url=self.ed_api_base.text().strip(),
+            api_model=self.cb_api_model.currentText().strip(),
+            api_key=self.ed_api_key.text().strip(),
+            api_timeout=self.sp_api_timeout.value(),
+        )
+
     def _save(self) -> None:
+        provider = self.cb_provider.currentData()
+        if provider == PROVIDER_OPENAI:
+            if not self.ed_api_base.text().strip():
+                style_pill(self.status, "请填写 API Base URL", "red")
+                self.status.setVisible(True)
+                return
+            if not self.cb_api_model.currentText().strip():
+                style_pill(self.status, "请填写 API 模型名", "red")
+                self.status.setVisible(True)
+                return
+
+        try:
+            current = schema.get_config()
+        except Exception:
+            current = dict(schema.DEFAULT_CONFIG)
         values = {
             "replenish_days": str(self.sp_replenish_days.value()),
             "lead_time_days": str(self.sp_lead_time.value()),
@@ -188,16 +332,30 @@ class SettingsPage(WorkPage):
             "min_support": f"{self.sp_min_support.value():.3f}",
             "slow_turnover_days": str(self.sp_slow_days.value()),
             "model": self.cb_model.currentText().strip() or "qwen3:4b",
+            "ollama_base_url": current.get(
+                "ollama_base_url", schema.DEFAULT_CONFIG["ollama_base_url"]
+            ),
+            "llm_provider": provider,
+            "api_base_url": self.ed_api_base.text().strip(),
+            "api_model": self.cb_api_model.currentText().strip(),
+            "api_key": self.ed_api_key.text().strip(),
+            "api_timeout": str(self.sp_api_timeout.value()),
         }
         try:
             schema.set_configs(values)
-            get_client().config.model = values["model"]
+            apply_config(schema.get_config())
         except Exception as exc:
             style_pill(self.status, "保存失败", "red")
             self.status.setVisible(True)
             self.lbl_stats.setText(f"写入配置失败：{exc}")
             return
-        style_pill(self.status, f"已保存 · {datetime.now().strftime('%H:%M:%S')}", "green")
+
+        if provider == PROVIDER_OPENAI and not (
+            self.ed_api_key.text().strip() or os.environ.get("SMARTWMS_API_KEY")
+        ):
+            style_pill(self.status, "已保存，但未填 API Key", "amber")
+        else:
+            style_pill(self.status, f"已保存 · {datetime.now().strftime('%H:%M:%S')}", "green")
         self.status.setVisible(True)
         self._update_hint()
         self.config_changed.emit()
@@ -209,65 +367,111 @@ class SettingsPage(WorkPage):
         self.sp_service_level.setValue(float(defaults["service_level"]))
         self.sp_min_support.setValue(float(defaults["min_support"]))
         self.sp_slow_days.setValue(int(defaults["slow_turnover_days"]))
+
+        index = self.cb_provider.findData(defaults["llm_provider"])
+        self.cb_provider.setCurrentIndex(index if index >= 0 else 0)
+
         index = self.cb_model.findText(defaults["model"])
         if index >= 0:
             self.cb_model.setCurrentIndex(index)
         else:
             self.cb_model.setEditText(defaults["model"])
+
+        self.ed_api_base.setText(defaults["api_base_url"])
+        self.cb_api_model.setCurrentText(defaults["api_model"])
+        self.ed_api_key.setText(defaults["api_key"])
+        self.sp_api_timeout.setValue(int(defaults["api_timeout"]))
+        self._on_provider_changed()
         style_pill(self.status, "已恢复默认值，记得点击保存", "amber")
         self.status.setVisible(True)
 
-    def _refresh_models(self) -> None:
+    # ==========================================================
+    # 连接探测
+    # ==========================================================
+    def _run_probe(self, populate: bool = False) -> None:
         if self._model_worker is not None and self._model_worker.isRunning():
             return
-        style_pill(self.status, "正在读取已安装模型…", "blue")
+        self._probe_populate = populate
+        style_pill(self.status, "正在读取模型列表…", "blue")
         self.status.setVisible(True)
+        self.lbl_api_status.setText("正在连接…")
+
+        client = LLMClient(self._config_from_form())
 
         def job():
-            client = get_client()
-            return client.is_available(), client.list_models()
+            available = client.is_available()
+            models = client.list_models() if available else []
+            return client, available, models
 
         self._model_worker = FunctionWorker(job)
-        self._model_worker.succeeded.connect(self._apply_models)
-        self._model_worker.failed.connect(self._models_failed)
+        self._model_worker.succeeded.connect(self._apply_probe)
+        self._model_worker.failed.connect(self._probe_failed)
         self._model_worker.start()
+
+    def _test_connection(self) -> None:
+        self._run_probe(populate=False)
 
     def shutdown(self) -> None:
         from app.ui.worker import stop_worker
 
         stop_worker(self._model_worker)
 
-    def _apply_models(self, result) -> None:
-        available, models = result
-        current = self.cb_model.currentText().strip()
-        choices = list(dict.fromkeys(MODEL_CHOICES + list(models)))
-        self.cb_model.blockSignals(True)
-        self.cb_model.clear()
-        self.cb_model.addItems(choices)
-        index = self.cb_model.findText(current)
-        if index >= 0:
-            self.cb_model.setCurrentIndex(index)
-        else:
-            self.cb_model.setEditText(current)
-        self.cb_model.blockSignals(False)
+    def _apply_probe(self, result) -> None:
+        client, available, models = result
         if available:
-            style_pill(self.status, f"模型服务在线 · 已安装 {len(models)} 个", "green")
-            self.lbl_stats.setText(
-                "已安装模型：" + ("、".join(models) if models else "无")
-                + "　（下拉框可手动输入其他模型名）"
-            )
+            style_pill(self.status, f"{client.provider_label} 在线", "green")
+            if client.is_remote:
+                current = self.cb_api_model.currentText().strip()
+                if models and self._probe_populate:
+                    self.cb_api_model.blockSignals(True)
+                    self.cb_api_model.clear()
+                    self.cb_api_model.addItems(models)
+                    idx = self.cb_api_model.findText(current)
+                    if idx >= 0:
+                        self.cb_api_model.setCurrentIndex(idx)
+                    else:
+                        self.cb_api_model.setCurrentText(current or models[0])
+                    self.cb_api_model.blockSignals(False)
+                detail = "、".join(models[:8]) if models else "该接口未返回模型列表"
+                self.lbl_api_status.setText(f"连接成功　可用模型：{detail}")
+                self.lbl_stats.setText(
+                    f"第三方 API：{client.config.api_base_url}　模型：{client.config.api_model}"
+                )
+            else:
+                current = self.cb_model.currentText().strip()
+                choices = list(dict.fromkeys(MODEL_CHOICES + list(models)))
+                if self._probe_populate:
+                    self.cb_model.blockSignals(True)
+                    self.cb_model.clear()
+                    self.cb_model.addItems(choices)
+                    idx = self.cb_model.findText(current)
+                    if idx >= 0:
+                        self.cb_model.setCurrentIndex(idx)
+                    else:
+                        self.cb_model.setEditText(current)
+                    self.cb_model.blockSignals(False)
+                self.lbl_api_status.setText(
+                    "本地模型：" + ("、".join(models) if models else "未检测到模型")
+                )
+                self.lbl_stats.setText(
+                    "已安装模型：" + ("、".join(models) if models else "无")
+                    + "　（下拉框可手动输入其他模型名）"
+                )
         else:
-            style_pill(self.status, "Ollama 未启动", "amber")
-            self.lbl_stats.setText(
-                "没有连接上本地 Ollama 服务。程序仍可运行，报告页会自动降级为基础统计模式。"
-            )
+            style_pill(self.status, "连接失败", "amber")
+            reason = client.degrade_reason()
+            self.lbl_api_status.setText(reason)
+            self.lbl_stats.setText(reason)
         self.status.setVisible(True)
 
-    def _models_failed(self, message: str) -> None:
+    def _probe_failed(self, message: str) -> None:
         style_pill(self.status, "读取模型失败", "red")
         self.status.setVisible(True)
+        self.lbl_api_status.setText(message)
         self.lbl_stats.setText(message)
 
+    # ==========================================================
+    # 备份与统计
     # ==========================================================
     def _backup(self) -> None:
         default = Path(schema.DB_PATH).parent / (

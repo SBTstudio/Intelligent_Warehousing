@@ -4,18 +4,19 @@
 
 **把收银小票和库存数据，变成能直接执行的补货、陈列和换季建议**
 
-基于 PySide6 + SQLite + Ollama 本地大模型的端侧智能仓储桌面应用
+基于 PySide6 + SQLite + Ollama / OpenAI 兼容 API 的智能仓储桌面应用
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
 ![PySide6](https://img.shields.io/badge/PySide6-6.6%2B-41CD52?logo=qt&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite&logoColor=white)
 ![Ollama](https://img.shields.io/badge/Ollama-local%20LLM-111111)
-![Tests](https://img.shields.io/badge/tests-53%20passed-brightgreen)
+![API](https://img.shields.io/badge/OpenAI-compatible-412991)
+![Tests](https://img.shields.io/badge/tests-61%20passed-brightgreen)
 [![Actions](https://github.com/SBTstudio/Intelligent_Warehousing/actions/workflows/tests.yml/badge.svg)](https://github.com/SBTstudio/Intelligent_Warehousing/actions/workflows/tests.yml)
 [![Release](https://img.shields.io/github/v/release/SBTstudio/Intelligent_Warehousing)](https://github.com/SBTstudio/Intelligent_Warehousing/releases/latest)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-[功能](#-功能一览) · [截图](#-界面预览) · [快速开始](#-快速开始) · [算法](#-核心算法) · [文档](#-文档) · [发布说明](docs/RELEASE_v1.0.1.md)
+[功能](#-功能一览) · [截图](#-界面预览) · [快速开始](#-快速开始) · [算法](#-核心算法) · [文档](#-文档) · [发布说明](docs/RELEASE_v1.0.2.md)
 
 </div>
 
@@ -50,11 +51,13 @@ SQLite 数据库，用可解释的统计算法算出：
 - 哪些是畅销、滞销、呆滞（ABC × XYZ 交叉分类）；
 - 哪些品类接下来可能进入旺季（同比 / 环比 / 季节指数）。
 
-最后交给**本机 Ollama** 上的小模型，把数字写成人能看懂的经营建议。
+默认交给**本机 Ollama** 上的小模型，把数字写成人能看懂的经营建议；
+也可以在「参数配置」里切换到**第三方 OpenAI 兼容 API**（DeepSeek、通义千问、OpenAI 等）。
 模型只负责表达，不负责计算；模型不可用时自动降级为模板报告，软件不会崩。
 
 > 课程设计项目，但按可交付软件的标准做：有测试、有压测、有异常路径、
-> 有用户手册和发布页。全部数据留在本机，不连接任何云端大模型。
+> 有用户手册和发布页。默认全部数据留在本机；第三方 API 是显式可选项，
+> 只发送聚合摘要，不上传原始 CSV 或数据库。
 
 ---
 
@@ -68,7 +71,7 @@ SQLite 数据库，用可解释的统计算法算出：
 | **补货预测** | 指数平滑、需求波动、安全库存 SS、补货点 ROP、建议补货日/量 | 1.1 目标 1 |
 | **畅销滞销** | ABC（销售额贡献）× XYZ（需求稳定性）+ 周转天数 | 2.1 输入量 2 |
 | **可视化** | 销量折线图、销售额柱状图、商品关联热力图 | 2.2.2 |
-| **本地 LLM** | Ollama 原生 `/api/chat`、`format=json`、超时/重试/降级 | 2.2.3 / 2.2.4 |
+| **LLM 接入** | 默认 Ollama 本地模型；可选 OpenAI 兼容第三方 API；超时/重试/降级 | 2.2.3 / 2.2.4 |
 | **分析报告** | 经营周报、滞销归因、陈列建议、换季推荐、热点映射 | 2.2.2 |
 | **参数配置** | 6 个业务参数落库、模型档位、数据库备份 | 2.4.3 |
 | **历史报告** | 报告保存与下拉回看 | 2.5 |
@@ -95,12 +98,17 @@ SQLite 数据库，用可解释的统计算法算出：
 |---|---|
 | ![图表](screenshots/05-charts.png) | ![分析报告](screenshots/06-report.png) |
 
-| 参数配置：业务参数 + 备份 |
+| 参数配置：业务参数 + 备份 | 第三方 API：配置与测试连接 |
+|---|---|
+| ![参数配置](screenshots/07-settings.png) | ![第三方 API 配置](screenshots/08-api-settings.png) |
+
+| 第三方 API 生成报告 |
 |---|
-| ![参数配置](screenshots/07-settings.png) |
+| ![第三方 API 报告](screenshots/09-report-api.png) |
 
 > 截图中的报告页显示"基础统计模式"，是因为截屏机器只装了嵌入模型、
-> 没有安装 `qwen3:4b`。装好模型后会自动切换为本地 LLM 输出。
+> 没有安装 `qwen3:4b`。装好模型后会自动切换为本地 LLM 输出；
+> 也可以在「参数配置」里改用第三方 API。
 
 ---
 
@@ -239,7 +247,7 @@ MoM = (本月 − 上月) / 上月
 
 ---
 
-## 🤖 本地 LLM 工程
+## 🤖 LLM 接入工程
 
 这一层最值得说的是**怎么让 4B 模型在可接受时间内返回合法 JSON**。
 
@@ -261,6 +269,32 @@ qwen3 默认会先生成一大段"思考"，`think=False` 和 `/no_think` 都拦
    界面显示"基础统计模式"，不崩溃、不白屏。
 
 默认超时 60 s；连接失败会立即降级，不会让用户干等。
+
+### 第三方 API 接入（v1.0.2）
+
+默认模型来源仍然是 **Ollama 本地模型**。需要更强模型时，在「参数配置」页
+把「模型来源」切到 **第三方 OpenAI 兼容 API**，填写 Base URL、模型名和 Key 即可。
+
+常见配置：
+
+| 服务商 | Base URL | 模型名示例 |
+|---|---|---|
+| DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
+| 通义千问（兼容模式） | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` |
+| OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
+| Moonshot | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` |
+
+实现细节：
+
+- 统一走 `POST {base_url}/chat/completions`，按 OpenAI 协议解析；
+- JSON 任务发送 `response_format={"type":"json_object"}`；服务商不支持时自动去掉该字段重试；
+- 支持 `401/403` 鉴权失败、`429` 限流、`404` 模型不存在、超时、连接失败等分类提示；
+- 模型不可用时仍走模板兜底，统计、补货、分类不受影响；
+- API Key 可保存在本机 SQLite，也可用环境变量 `SMARTWMS_API_KEY` 覆盖。
+
+**隐私边界**：切到第三方 API 后，只发送算法层已经聚合好的摘要（SKU 数、销售额、
+补货行、关联规则等），不会上传原始 CSV、数据库文件或逐笔交易明细。
+默认的 Ollama 模式完全不联网。
 
 ---
 
@@ -311,7 +345,7 @@ Intelligent_Warehousing/
 │   │   └── ingest.py          编码 / 列名 / 校验
 │   ├── db/schema.py           SQLite 建表与读写
 │   ├── llm/                   ★ LLM 应用层
-│   │   ├── client.py          Ollama 客户端 + 重试 + 降级
+│   │   ├── client.py          Ollama / 第三方 API 客户端 + 重试 + 降级
 │   │   ├── prompts.py         六套 Prompt
 │   │   └── tasks.py           六类任务 + 模板兜底
 │   └── ui/                    界面层
@@ -324,7 +358,7 @@ Intelligent_Warehousing/
 │       ├── page_settings.py
 │       └── widgets/chart_view.py
 │
-├── tests/                     53 个自动化测试
+├── tests/                     61 个自动化测试
 ├── tools/                     假数据 / 容量压测 / 环境自检
 ├── data/sample/               120 天示例数据
 ├── screenshots/               README 截图
@@ -337,7 +371,7 @@ Intelligent_Warehousing/
 
 ```bash
 pytest -q
-# 53 passed in 0.30s
+# 61 passed in 0.20s
 ```
 
 | 测试文件 | 用例 | 内容 |
@@ -346,7 +380,7 @@ pytest -q
 | `tests/test_data_layer.py` | 8 | 建表、读写、幂等、配置 |
 | `tests/test_ingest.py` | 11 | 编码、列名、脏数据、只读 |
 | `tests/test_seasonal.py` | 7 | 同比、环比、斜率、季节指数 |
-| `tests/test_llm.py` | 11 | 降级、JSON 提取、任务兜底 |
+| `tests/test_llm.py` | 19 | 降级、JSON 提取、第三方 API 协议/鉴权、任务兜底 |
 
 手工验收清单、性能数据、异常路径见 [测试报告](docs/测试报告.md)。
 
@@ -398,7 +432,12 @@ S001,青岛啤酒,饮料,3.20,5.50
 | 服务水平 | 0.950 | 决定 z 值，越高安全库存越大 |
 | 最小支持度 | 0.010 | Apriori 阈值 |
 | 滞销阈值 | 45 天 | 周转天数超过它判滞销 |
-| 模型档位 | qwen3:4b | 本地模型名称 |
+| 模型来源 | Ollama 本地 | 本地 Ollama 或第三方 OpenAI 兼容 API |
+| 本地模型档位 | qwen3:4b | Ollama 模型名称 |
+| API Base URL | 空 | 例如 `https://api.deepseek.com/v1` |
+| API 模型名 | deepseek-chat | 第三方模型的名称 |
+| API Key | 空 | 可存本机，也可用环境变量 `SMARTWMS_API_KEY` |
+| API 超时 | 60 秒 | 第三方接口请求超时 |
 
 所有参数保存在 `config` 表，重启后自动回填。
 
@@ -414,6 +453,8 @@ S001,青岛啤酒,饮料,3.20,5.50
   把计算和表达拆开，既满足精度又保留自然语言能力。
 - **为什么保留三条降级路径**：服务未启动 / 模型未下载 / JSON 非法，
   三种原因给三种提示，用户知道下一步该做什么。
+- **为什么还接第三方 API**：本地 4B 模型在弱机器上质量有限；
+  第三方 API 作为**显式可选**补充，默认仍是 Ollama，且只发送聚合摘要。
 - **为什么不做 M14 客户画像**：需要真实会员 ID 和跨月购买记录，
   当前数据拿不到；写进后续迭代比硬做一个假功能更诚实。
 
@@ -422,9 +463,10 @@ S001,青岛啤酒,饮料,3.20,5.50
 ## 🗺 Roadmap
 
 - [x] v1.0.0：五个页面、四类算法、本地 LLM、53 个测试、发布页
+- [x] v1.0.1：Windows exe / macOS dmg 打包与 Release 自动构建
+- [x] v1.0.2：新增第三方 OpenAI 兼容 API（DeepSeek / 通义 / OpenAI 等）
 - [ ] v1.1：手动逐行录入（需求 2.4.3）、按周聚合的 XYZ 判断
-- [ ] v1.2：PyInstaller 打包 exe / dmg
-- [ ] v1.3：按内存自动推荐模型档位
+- [ ] v1.2：按内存自动推荐模型档位、API 用量统计
 - [ ] v2.0：客户画像与相似用户陈列优化（M14，需真实会员数据）
 
 ---
@@ -436,11 +478,12 @@ S001,青岛啤酒,饮料,3.20,5.50
 | [需求分析](docs/需求分析.md) | 需求条目、追踪矩阵、验收标准 |
 | [概要设计](docs/概要设计.md) | 架构、数据模型、算法、LLM 调用链 |
 | [用户手册](docs/用户手册.md) | 安装、页面操作、数据格式、FAQ |
-| [测试报告](docs/测试报告.md) | 53 个测试、性能实测、手工验收 |
+| [测试报告](docs/测试报告.md) | 61 个测试、性能实测、手工验收 |
 | [数据存储设计](docs/数据存储设计说明.md) | 三年容量、索引、ANALYZE 实测 |
 | [功能拆解与开发路线](docs/功能拆解与开发路线.md) | 历史规划与工时 |
 | [开发分工与进度](docs/开发分工与进度.md) | 两人分工、复盘、答辩分工 |
 | [5 分钟演示脚本](docs/演示脚本.md) | 答辩现场演示流程与追问答案 |
+| [发布说明 v1.0.2](docs/RELEASE_v1.0.2.md) | 第三方 API 接入版本 |
 | [发布说明 v1.0.1](docs/RELEASE_v1.0.1.md) | Windows / macOS 安装包 |
 | [发布说明 v1.0.0](docs/RELEASE_v1.0.0.md) | 首个完整版本 |
 | [原始需求 docx](docs/智能仓储需求分析文档.docx) | 课程原始文档 |

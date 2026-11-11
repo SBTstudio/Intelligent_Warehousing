@@ -9,6 +9,10 @@
 
 from __future__ import annotations
 
+import json
+
+import pytest
+
 from app.core import basket, classify, ingest, replenish
 from app.llm import client as llm_client
 from app.llm import prompts, tasks
@@ -126,3 +130,135 @@ def test_prompt_templates_have_required_fields():
     )
     prompts.SLOW_MOVER_USER.format(days=90, slow_list="")
     prompts.TREND_USER.format(trend_text="", categories="", customer_profile="")
+
+
+# =====================================================================
+# 第三方 OpenAI 兼容 API
+# =====================================================================
+class _FakeResponse:
+    def __init__(self, status_code: int = 200, payload=None, text: str = ""):
+        self.status_code = status_code
+        self._payload = payload
+        self.text = text or json.dumps(payload or {}, ensure_ascii=False)
+
+    def json(self):
+        return self._payload
+
+
+def _remote_client(**kwargs) -> llm_client.LLMClient:
+    config = llm_client.LLMConfig(
+        provider=llm_client.PROVIDER_OPENAI,
+        api_base_url="https://api.example.com/v1",
+        api_key="sk-test",
+        api_model="test-model",
+        api_timeout=20,
+    )
+    for key, value in kwargs.items():
+        setattr(config, key, value)
+    return llm_client.LLMClient(config)
+
+
+def test_remote_chat_uses_openai_protocol(monkeypatch):
+    calls = []
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        calls.append({"url": url, "json": json, "headers": headers, "timeout": timeout})
+        return _FakeResponse(200, {"choices": [{"message": {"content": "你好，店主"}}]})
+
+    monkeypatch.setattr(llm_client.requests, "post", fake_post)
+    client = _remote_client()
+    assert client.chat("system", "user") == "你好，店主"
+
+    assert calls[0]["url"] == "https://api.example.com/v1/chat/completions"
+    assert calls[0]["json"]["model"] == "test-model"
+    assert calls[0]["headers"]["Authorization"] == "Bearer sk-test"
+    assert calls[0]["json"]["messages"][0]["role"] == "system"
+
+
+def test_remote_chat_json_uses_response_format(monkeypatch):
+    calls = []
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        calls.append(json)
+        return _FakeResponse(
+            200,
+            {"choices": [{"message": {"content": '```json\n{"ok": true}\n```'}}]},
+        )
+
+    monkeypatch.setattr(llm_client.requests, "post", fake_post)
+    parsed = _remote_client().chat_json("system", "user")
+    assert parsed == {"ok": True}
+    assert calls[0]["response_format"] == {"type": "json_object"}
+
+
+def test_remote_json_falls_back_without_response_format(monkeypatch):
+    calls = []
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        calls.append(dict(json or {}))
+        if len(calls) == 1:
+            return _FakeResponse(400, {"error": {"message": "response_format unsupported"}})
+        return _FakeResponse(200, {"choices": [{"message": {"content": '{"ok": true}'}}]})
+
+    monkeypatch.setattr(llm_client.requests, "post", fake_post)
+    assert _remote_client().chat_json("system", "user") == {"ok": True}
+    assert "response_format" in calls[0]
+    assert "response_format" not in calls[1]
+
+
+def test_remote_missing_key_degrades(monkeypatch):
+    monkeypatch.delenv("SMARTWMS_API_KEY", raising=False)
+    client = _remote_client(api_key="")
+    with pytest.raises(llm_client.LLMUnavailable):
+        client.chat("system", "user")
+    assert "API Key" in client.degrade_reason()
+
+
+def test_remote_auth_failure_is_reported(monkeypatch):
+    monkeypatch.setattr(
+        llm_client.requests,
+        "get",
+        lambda *args, **kwargs: _FakeResponse(401, {"message": "bad token"}),
+    )
+    client = _remote_client()
+    assert client.is_available() is False
+    assert "鉴权失败" in client.degrade_reason()
+
+
+def test_remote_is_available_and_lists_models(monkeypatch):
+    calls = []
+
+    def fake_get(url, headers=None, timeout=None):
+        calls.append(url)
+        return _FakeResponse(
+            200, {"data": [{"id": "test-model"}, {"id": "other-model"}]}
+        )
+
+    monkeypatch.setattr(llm_client.requests, "get", fake_get)
+    client = _remote_client()
+    assert client.is_available() is True
+    assert client.list_models() == ["test-model", "other-model"]
+    assert calls[0] == "https://api.example.com/v1/models"
+
+
+def test_client_from_config_reads_provider_fields(monkeypatch):
+    monkeypatch.delenv("SMARTWMS_API_KEY", raising=False)
+    client = llm_client.client_from_config(
+        {
+            "llm_provider": "openai",
+            "api_base_url": "https://api.deepseek.com/v1",
+            "api_key": "sk-config",
+            "api_model": "deepseek-chat",
+            "api_timeout": "45",
+        }
+    )
+    assert client.provider == llm_client.PROVIDER_OPENAI
+    assert client.config.api_model == "deepseek-chat"
+    assert client.config.api_timeout == 45
+    assert client.is_remote is True
+
+
+def test_env_api_key_overrides_config(monkeypatch):
+    monkeypatch.setenv("SMARTWMS_API_KEY", "sk-env")
+    client = _remote_client(api_key="sk-config")
+    assert client._api_key() == "sk-env"

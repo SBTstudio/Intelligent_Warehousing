@@ -397,7 +397,20 @@ def health_check() -> tuple[bool, str]:
     """检查模型可用性，返回 (是否可用, 提示文案)。前端页面顶部用它显示状态。"""
     client = get_client()
     if not client.is_available():
-        return False, "模型服务未启动，智能分析功能已降级"
+        return False, client.degrade_reason()
+
+    if client.is_remote:
+        model = client.config.api_model
+        models = client.list_models()
+        if models and model not in models:
+            installed = "、".join(models[:8])
+            return (
+                False,
+                f"第三方 API 可用，但模型 {model} 不在可用列表中（{installed}）；"
+                "请到「参数配置」页修改模型名",
+            )
+        return True, f"第三方 API 正常　模型：{model}　地址：{client.config.api_base_url}"
+
     models = client.list_models()
     wanted = client.config.model
     if not models:
@@ -410,4 +423,4 @@ def health_check() -> tuple[bool, str]:
             f"Ollama 已启动，但未安装模型 {wanted}（已安装：{'、'.join(models)}）；"
             "智能分析将降级为基础统计模式",
         )
-    return True, f"模型服务正常　已安装：{', '.join(models)}"
+    return True, f"Ollama 正常　模型：{wanted}　已安装：{', '.join(models)}"

@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 
 from app.db import schema
 from app.llm import tasks
+from app.llm.client import get_client
 from app.paths import resource_path
 from app.ui.page_basket import BasketPage
 from app.ui.page_import import ImportPage
@@ -105,7 +106,7 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(brand)
 
-        subtitle = QLabel("SMART WMS  ·  v1.0.0")
+        subtitle = QLabel("SMART WMS  ·  v1.0.2")
         subtitle.setStyleSheet(
             f"color: {COLORS['muted']}; font-size: 10px; padding-left: 23px;"
             "letter-spacing: 1px; background: transparent;"
@@ -128,7 +129,7 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(self.nav, 1)
 
-        foot = QLabel("Python 3.12 · SQLite · Ollama\n所有数据保存在本机")
+        foot = QLabel("Python 3.12 · SQLite · Ollama / API\n数据默认保存在本机")
         foot.setStyleSheet(
             "color: #8A887F; font-size: 10px; padding-left: 22px;"
             "line-height: 1.6; background: transparent;"
@@ -173,6 +174,7 @@ class MainWindow(QMainWindow):
 
     def _on_config_changed(self) -> None:
         self.replenish_page.on_config_changed()
+        self.report_page.on_config_changed()
         self.status_label.setText("参数已保存，补货与分类结果将在下次计算时生效")
 
     def _refresh_db_label(self) -> None:
@@ -212,14 +214,16 @@ class MainWindow(QMainWindow):
 
     def _apply_model_status(self, result) -> None:
         available, message = result
+        client = get_client()
+        prefix = "第三方 API" if client.is_remote else "本地模型"
         if available:
-            self.model_label.setText("模型：在线")
+            self.model_label.setText(f"{prefix}：在线")
             self.model_label.setStyleSheet(
                 f"color: {COLORS['green']}; padding-right: 10px; font-weight: 600;"
             )
             self.model_label.setToolTip(message)
         else:
-            self.model_label.setText("模型：不可用 · 统计模式")
+            self.model_label.setText(f"{prefix}：不可用 · 统计模式")
             self.model_label.setStyleSheet(
                 f"color: {COLORS['amber']}; padding-right: 10px; font-weight: 600;"
             )

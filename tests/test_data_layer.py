@@ -117,6 +117,8 @@ def test_config_defaults_and_write():
     schema.init_db()
     cfg = schema.get_config()
     assert "service_level" in cfg and "min_support" in cfg
+    assert cfg["llm_provider"] == "ollama"
+    assert "api_base_url" in cfg and "api_model" in cfg
 
     schema.set_config("min_support", "0.025")
     assert schema.get_config()["min_support"] == "0.025"

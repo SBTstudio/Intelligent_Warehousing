@@ -56,6 +56,7 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from app.db import schema
+from app.llm.client import apply_config
 from app.paths import is_frozen, resource_path
 from app.ui.main_window import MainWindow
 from app.ui.theme import apply_theme
@@ -75,6 +76,8 @@ def main() -> int:
     # 建表。重复调用是安全的；首次运行会在 data/ 下生成 app.db
     try:
         schema.init_db()
+        # 读取 config 表里的模型来源（Ollama / 第三方 API）
+        apply_config(schema.get_config())
     except Exception as exc:  # 数据库坏了也要让窗口起来，把原因显示出来
         print(f"[警告] 数据库初始化失败：{exc}", file=sys.stderr)
 

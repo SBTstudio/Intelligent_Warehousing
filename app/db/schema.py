@@ -346,7 +346,15 @@ DEFAULT_CONFIG = {
     "service_level": "0.95",
     "min_support": "0.010",
     "slow_turnover_days": "45",
+    # 本地 Ollama
     "model": "qwen3:4b",
+    "ollama_base_url": "http://127.0.0.1:11434",
+    # 第三方 OpenAI 兼容 API（默认关闭，provider=ollama）
+    "llm_provider": "ollama",
+    "api_base_url": "https://api.deepseek.com/v1",
+    "api_model": "deepseek-chat",
+    "api_key": "",
+    "api_timeout": "60",
 }
 
 

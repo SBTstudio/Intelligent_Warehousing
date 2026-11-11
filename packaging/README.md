@@ -34,7 +34,7 @@ xattr -dr com.apple.quarantine /Applications/SmartWMS.app
 并把 exe / dmg 上传到指定 Release：
 
 ```text
-Actions → release-packages → Run workflow → 输入 tag（如 v1.0.1）
+Actions → release-packages → Run workflow → 输入 tag（如 v1.0.2）
 ```
 
 ## 数据目录

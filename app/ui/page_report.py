@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 from app.core import basket, classify, replenish
 from app.db import schema
 from app.llm import prompts, tasks
+from app.llm.client import get_client
 from app.ui.base_page import WorkPage
 from app.ui.helpers import hint_label, pill, style_pill
 from app.ui.worker import FunctionWorker
@@ -46,8 +47,9 @@ class ReportPage(WorkPage):
     def __init__(self):
         super().__init__(
             "分析报告",
-            "由本地大模型把算法结果解读为经营建议。所有数值均来自算法层，"
-            "大模型只负责文字表达，不参与计算；模型不可用时自动降级为基础统计模式。",
+            "由本地大模型或第三方 OpenAI 兼容 API 把算法结果解读为经营建议。"
+            "所有数值均来自算法层，模型只负责文字表达，不参与计算；"
+            "模型不可用时自动降级为基础统计模式。",
         )
         self.setWindowTitle("分析报告")
         self._worker: FunctionWorker | None = None
@@ -140,9 +142,11 @@ class ReportPage(WorkPage):
 
     def _apply_status(self, result) -> None:
         available, message = result
+        client = get_client()
+        prefix = "第三方 API" if client.is_remote else "本地模型"
         if available:
             self.lbl_meta.setText(message)
-            style_pill(self.status, "模型服务在线", "green")
+            style_pill(self.status, f"{prefix}在线", "green")
         else:
             self.lbl_meta.setText(message + "　（报告仍可生成，使用模板兜底）")
             style_pill(self.status, "基础统计模式", "amber")
@@ -187,9 +191,14 @@ class ReportPage(WorkPage):
 
         self.btn_gen.setEnabled(False)
         self.btn_gen.setText("生成中…")
-        style_pill(self.status, "正在请求本地模型…", "blue")
+        client = get_client()
+        provider_name = "第三方 API" if client.is_remote else "本地模型"
+        style_pill(self.status, f"正在请求{provider_name}…", "blue")
         self.status.setVisible(True)
-        self.lbl_meta.setText("本地模型最长等待 60 秒；若服务不可用会立即切换为基础统计模式。")
+        timeout = client.request_timeout
+        self.lbl_meta.setText(
+            f"{provider_name}最长等待 {timeout} 秒；若不可用会立即切换为基础统计模式。"
+        )
 
         def job():
             profiles = classify.analyze(records, inventory, slow_turnover_days=slow_days)
@@ -280,13 +289,15 @@ class ReportPage(WorkPage):
         self._last_report = (report_type, full_text, sample_size)
         self.btn_save.setEnabled(True)
 
+        client = get_client()
+        provider_name = "第三方 API" if client.is_remote else "本地模型"
         if used:
-            style_pill(self.status, "生成完成 · 本地模型", "green")
+            style_pill(self.status, f"生成完成 · {provider_name}", "green")
             self.banner.setVisible(False)
         else:
             style_pill(self.status, "生成完成 · 基础统计模式", "amber")
             self.banner.setText(
-                "本地模型当前不可用，报告已由算法结果 + 模板自动兜底生成；"
+                f"{provider_name}当前不可用，报告已由算法结果 + 模板自动兜底生成；"
                 "库存、补货、分类等计算不受影响。"
             )
             self.banner.setVisible(True)
@@ -302,8 +313,10 @@ class ReportPage(WorkPage):
         style_pill(self.status, "生成失败", "red")
         self.status.setVisible(True)
         self.lbl_meta.setText(message)
+        client = get_client()
+        provider_name = "第三方 API" if client.is_remote else "Ollama"
         self.banner.setText(
-            "报告生成过程中出现异常，算法统计功能不受影响。请检查 Ollama 是否运行，"
+            f"报告生成过程中出现异常，算法统计功能不受影响。请检查{provider_name}配置，"
             "或直接查看「库存与补货」页的表格结果。"
         )
         self.banner.setVisible(True)
@@ -313,8 +326,13 @@ class ReportPage(WorkPage):
         if not self._last_report:
             return
         report_type, content, sample_size = self._last_report
+        client = get_client()
         params = json.dumps(
-            {"generated_by": "local-llm-or-template", "app": "SmartWMS", "version": "1.0.0"},
+            {
+                "generated_by": client.provider,
+                "app": "SmartWMS",
+                "version": "1.0.2",
+            },
             ensure_ascii=False,
         )
         try:
@@ -372,5 +390,13 @@ class ReportPage(WorkPage):
         self.status.setVisible(True)
 
     def on_show(self) -> None:
-        if self._status_worker is None:
-            self._check_status()
+        if self._status_worker is not None and self._status_worker.isRunning():
+            return
+        self._check_status()
+
+    def on_config_changed(self) -> None:
+        if self._status_worker is not None and self._status_worker.isRunning():
+            return
+        self._check_status()
+        style_pill(self.status, "模型配置已更新", "blue")
+        self.status.setVisible(True)
