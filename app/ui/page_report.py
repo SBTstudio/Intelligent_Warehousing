@@ -331,7 +331,7 @@ class ReportPage(WorkPage):
             {
                 "generated_by": client.provider,
                 "app": "SmartWMS",
-                "version": "1.0.2",
+                "version": "1.0.3",
             },
             ensure_ascii=False,
         )

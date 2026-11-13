@@ -6,7 +6,7 @@ on:
       tag:
         description: "Release tag (e.g. v1.0.1)"
         required: true
-        default: "v1.0.2"
+        default: "v1.0.3"
 
 permissions:
   contents: write
@@ -106,8 +106,8 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag }}
-          name: "v1.0.2 — 第三方 API + Windows / macOS 安装包"
-          body_path: docs/RELEASE_v1.0.2.md
+          name: "v1.0.3 — 实时库存 + Windows / macOS 安装包"
+          body_path: docs/RELEASE_v1.0.3.md
           files: |
             artifacts/SmartWMS-Windows-x64.exe
             artifacts/SmartWMS-macOS-arm64.dmg

@@ -19,12 +19,13 @@ from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
     QHBoxLayout,
+    QLabel,
     QListWidget,
     QPushButton,
     QTableWidget,
 )
 
-from app.core import ingest
+from app.core import ingest, templates
 from app.db import schema
 from app.paths import sample_dir
 from app.ui.base_page import WorkPage
@@ -90,6 +91,21 @@ class ImportPage(WorkPage):
         self.btn_products.clicked.connect(lambda: self._choose("products"))
         self.btn_sample.clicked.connect(self._load_sample)
 
+        template_row = QHBoxLayout()
+        template_row.setSpacing(8)
+        template_row.addWidget(QLabel("空白模板："))
+        self.btn_tpl_receipt = QPushButton("下载小票模板")
+        self.btn_tpl_inventory = QPushButton("下载库存模板")
+        self.btn_tpl_products = QPushButton("下载商品档案模板")
+        for button in (self.btn_tpl_receipt, self.btn_tpl_inventory, self.btn_tpl_products):
+            button.setProperty("variant", "ghost")
+            template_row.addWidget(button)
+        template_row.addStretch(1)
+        self.body.addLayout(template_row)
+        self.btn_tpl_receipt.clicked.connect(lambda: self._download_template("receipt"))
+        self.btn_tpl_inventory.clicked.connect(lambda: self._download_template("inventory"))
+        self.btn_tpl_products.clicked.connect(lambda: self._download_template("products"))
+
         self.lbl_info = hint_label("尚未选择文件")
         self.body.addWidget(self.lbl_info)
 
@@ -131,6 +147,33 @@ class ImportPage(WorkPage):
         self.btn_confirm.clicked.connect(self._confirm)
         self.btn_cancel.clicked.connect(self._clear_pending)
         self.refresh()
+
+    # ==========================================================
+    # 模板下载
+    # ==========================================================
+    def _download_template(self, kind: str) -> None:
+        downloads = Path.home() / "Downloads"
+        folder = downloads if downloads.exists() else Path.home()
+        default = folder / templates.TEMPLATE_FILENAMES[kind]
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            f"保存{templates.TEMPLATE_LABELS[kind]}模板",
+            str(default),
+            "CSV 模板 (*.csv)",
+        )
+        if not path:
+            return
+        try:
+            target = templates.write_template(kind, path)
+        except Exception as exc:
+            self._set_error(f"保存模板失败：{exc}")
+            return
+        style_pill(self.status, "模板已保存", "green")
+        self.status.setVisible(True)
+        self.lbl_info.setText(
+            f"已保存中文空白模板：{target}　"
+            "用 Excel 打开填写后，再回到本页选择文件导入。"
+        )
 
     # ==========================================================
     # 文件选择与校验

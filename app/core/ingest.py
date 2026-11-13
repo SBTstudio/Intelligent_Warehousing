@@ -92,7 +92,10 @@ _ALIAS_GROUPS = {
         "采购成本", "单位成本", "成本价",
     ],
     "price": ["price", "retail_price", "list_price", "价格", "定价", "零售价格"],
-    "snapshot_date": ["snapshot_date", "snapshot", "快照日期", "盘点日期", "统计日期"],
+    "snapshot_date": [
+        "snapshot_date", "snapshot", "快照日期", "快照时间", "盘点日期",
+        "统计日期", "更新时间",
+    ],
 }
 
 # 反向索引：规范化后的别名 → 标准列名

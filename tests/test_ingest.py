@@ -143,3 +143,22 @@ def test_load_sample_returns_records_and_inventory():
     assert len(records) > 2000
     assert len(inventory) == 30
     assert all("date" in row and "ts" in row for row in records[:10])
+
+
+def test_chinese_templates_roundtrip(tmp_path):
+    from app.core import templates
+
+    expected_required = {
+        "receipt": {"sku_id", "qty", "date"},
+        "inventory": {"sku_id", "stock_qty"},
+        "products": {"sku_id"},
+    }
+    for kind, headers in templates.TEMPLATE_HEADERS.items():
+        path = templates.write_template(kind, tmp_path / f"{kind}.csv")
+        raw = path.read_bytes()
+        assert raw.startswith(b"\xef\xbb\xbf"), "模板应带 UTF-8 BOM，Excel 打开不乱码"
+        with path.open(encoding="utf-8-sig") as handle:
+            first_line = handle.readline().strip()
+        assert first_line == ",".join(headers)
+        mapping = ingest.normalize_columns(headers)
+        assert expected_required[kind] <= set(mapping.values())

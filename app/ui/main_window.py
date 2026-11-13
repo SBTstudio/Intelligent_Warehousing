@@ -24,14 +24,22 @@ from app.llm.client import get_client
 from app.paths import resource_path
 from app.ui.page_basket import BasketPage
 from app.ui.page_import import ImportPage
+from app.ui.page_realtime import RealtimePage
 from app.ui.page_replenish import ReplenishPage
 from app.ui.page_report import ReportPage
 from app.ui.page_settings import SettingsPage
 from app.ui.theme import COLORS
 from app.ui.worker import FunctionWorker, stop_worker
 
-VERSION = "1.0.0"
-NAV_LABELS = ["数据导入", "购物篮分析", "库存与补货", "分析报告", "参数配置"]
+VERSION = "1.0.3"
+NAV_LABELS = [
+    "数据导入",
+    "实时库存",
+    "购物篮分析",
+    "库存与补货",
+    "分析报告",
+    "参数配置",
+]
 
 
 class MainWindow(QMainWindow):
@@ -59,6 +67,7 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         self.pages = [
             ImportPage(),
+            RealtimePage(),
             BasketPage(),
             ReplenishPage(),
             ReportPage(),
@@ -74,12 +83,14 @@ class MainWindow(QMainWindow):
         self.nav.setCurrentRow(0)
 
         self.import_page = self.pages[0]
-        self.basket_page = self.pages[1]
-        self.replenish_page = self.pages[2]
-        self.report_page = self.pages[3]
-        self.settings_page = self.pages[4]
+        self.realtime_page = self.pages[1]
+        self.basket_page = self.pages[2]
+        self.replenish_page = self.pages[3]
+        self.report_page = self.pages[4]
+        self.settings_page = self.pages[5]
 
         self.import_page.data_imported.connect(self._on_data_imported)
+        self.realtime_page.data_changed.connect(self._on_data_imported)
         self.settings_page.config_changed.connect(self._on_config_changed)
 
         self._model_worker: FunctionWorker | None = None
@@ -106,7 +117,7 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(brand)
 
-        subtitle = QLabel("SMART WMS  ·  v1.0.2")
+        subtitle = QLabel("SMART WMS  ·  v1.0.3")
         subtitle.setStyleSheet(
             f"color: {COLORS['muted']}; font-size: 10px; padding-left: 23px;"
             "letter-spacing: 1px; background: transparent;"
@@ -182,6 +193,7 @@ class MainWindow(QMainWindow):
             stats = schema.db_stats()
             self.db_label.setText(
                 f"数据库 {stats['size_mb']} MB · 明细 {stats['transaction_items']:,} 行"
+                f" · 库存流水 {stats.get('inventory_events', 0):,} 条"
             )
             self.db_label.setToolTip(
                 f"{schema.DB_PATH}\n跨度 {stats['span_days']} 天，"

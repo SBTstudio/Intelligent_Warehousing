@@ -38,7 +38,8 @@ CREATE TABLE IF NOT EXISTS products (
     sku_name   TEXT NOT NULL DEFAULT '',
     category   TEXT NOT NULL DEFAULT '',
     cost       REAL NOT NULL DEFAULT 0,      -- 进货成本
-    price      REAL NOT NULL DEFAULT 0       -- 零售价
+    price      REAL NOT NULL DEFAULT 0,      -- 零售价
+    updated_at TEXT NOT NULL DEFAULT ''      -- 最近一次档案/库存变更时间
 );
 
 -- 交易头：一张小票一行
@@ -73,6 +74,23 @@ CREATE TABLE IF NOT EXISTS inventory (
 -- 覆盖索引：三年数据的库存快照有几十万行，逐行回表取 stock_qty 很慢。
 -- 把 stock_qty 直接放进索引，聚合查询就不用回表了（实测 2174ms → 36ms）。
 CREATE INDEX IF NOT EXISTS idx_inv_sku_stock ON inventory(sku_id, stock_qty);
+
+-- 库存变动流水：每一次卖出 / 补货 / 建档 / 调整都按时间戳留痕
+CREATE TABLE IF NOT EXISTS inventory_events (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    sku_id      TEXT NOT NULL,
+    ts          TEXT NOT NULL,              -- 精确到秒的时间戳
+    action      TEXT NOT NULL,              -- sale / restock / create / adjust
+    delta       REAL NOT NULL DEFAULT 0,    -- 正数入库，负数出库
+    stock_after REAL NOT NULL DEFAULT 0,
+    unit_price  REAL NOT NULL DEFAULT 0,
+    cost        REAL NOT NULL DEFAULT 0,
+    source      TEXT NOT NULL DEFAULT 'manual',  -- manual / barcode / nfc
+    order_id    TEXT NOT NULL DEFAULT '',
+    note        TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_inv_event_ts  ON inventory_events(ts);
+CREATE INDEX IF NOT EXISTS idx_inv_event_sku ON inventory_events(sku_id);
 
 -- 历史分析报告
 CREATE TABLE IF NOT EXISTS reports (
@@ -133,6 +151,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_item_order_sku "
         "ON transaction_items(order_id, sku_id)"
     )
+    # 旧数据库补 updated_at 列（SCHEMA 里新库已经包含）
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(products)")}
+    if "updated_at" not in columns:
+        conn.execute(
+            "ALTER TABLE products ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''"
+        )
 
 
 def analyze() -> None:
@@ -154,13 +178,26 @@ def insert_products(rows: list[dict]) -> int:
     """批量写入 SKU 档案。rows 每项含 sku_id / sku_name / category / cost / price。"""
     if not rows:
         return 0
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     sql = (
-        "INSERT OR REPLACE INTO products (sku_id, sku_name, category, cost, price) "
-        "VALUES (:sku_id, :sku_name, :category, :cost, :price)"
+        "INSERT OR REPLACE INTO products "
+        "(sku_id, sku_name, category, cost, price, updated_at) "
+        "VALUES (:sku_id, :sku_name, :category, :cost, :price, :updated_at)"
     )
+    payload = [
+        {
+            "sku_id": str(r["sku_id"]),
+            "sku_name": str(r.get("sku_name", "")),
+            "category": str(r.get("category", "")),
+            "cost": float(r.get("cost", 0) or 0),
+            "price": float(r.get("price", 0) or 0),
+            "updated_at": str(r.get("updated_at") or now),
+        }
+        for r in rows
+    ]
     with get_conn() as conn:
-        conn.executemany(sql, rows)
-    return len(rows)
+        conn.executemany(sql, payload)
+    return len(payload)
 
 
 def ensure_products(sku_ids: list[str], names: dict[str, str] | None = None) -> int:
@@ -173,6 +210,7 @@ def ensure_products(sku_ids: list[str], names: dict[str, str] | None = None) -> 
     if not sku_ids:
         return 0
     names = names or {}
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     payload = [
         {
             "sku_id": str(sku),
@@ -180,13 +218,15 @@ def ensure_products(sku_ids: list[str], names: dict[str, str] | None = None) -> 
             "category": "",
             "cost": 0.0,
             "price": 0.0,
+            "updated_at": now,
         }
         for sku in sku_ids
     ]
     with get_conn() as conn:
         conn.executemany(
-            "INSERT OR IGNORE INTO products (sku_id, sku_name, category, cost, price) "
-            "VALUES (:sku_id, :sku_name, :category, :cost, :price)",
+            "INSERT OR IGNORE INTO products "
+            "(sku_id, sku_name, category, cost, price, updated_at) "
+            "VALUES (:sku_id, :sku_name, :category, :cost, :price, :updated_at)",
             payload,
         )
     return len(payload)
@@ -393,7 +433,14 @@ def db_stats() -> dict:
          "inventory": 328500, "products": 300, "span_days": 1095, "total_rows": 772770}
     """
     result: dict = {}
-    tables = ("products", "transactions", "transaction_items", "inventory", "reports")
+    tables = (
+        "products",
+        "transactions",
+        "transaction_items",
+        "inventory",
+        "inventory_events",
+        "reports",
+    )
     with get_conn() as conn:
         for t in tables:
             try:
@@ -407,7 +454,12 @@ def db_stats() -> dict:
         result["span_days"] = (end - start).days + 1
     else:
         result["span_days"] = 0
-    result["total_rows"] = result["transactions"] + result["transaction_items"] + result["inventory"]
+    result["total_rows"] = (
+        result["transactions"]
+        + result["transaction_items"]
+        + result["inventory"]
+        + result.get("inventory_events", 0)
+    )
     result["size_mb"] = round(DB_PATH.stat().st_size / 1024 / 1024, 1) if DB_PATH.exists() else 0.0
     return result
 

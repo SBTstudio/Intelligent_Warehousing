@@ -3,6 +3,37 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.0.3] - 2026-11-13
+
+新增实时库存 / 收银辅助与中文空白模板。
+
+### Added
+
+- 新增「实时库存」页：
+  - 直接填写商品编号、名称、品类、进价、售价、库存并保存；
+  - 表格行内「卖出 1」「补货 1」按钮；
+  - 顶部扫码/手输框，支持手动 / 条形码 / NFC 来源；
+  - 秒级时间戳变动记录，展示变动量、变动后库存、订单号。
+- 新增 `inventory_events` 流水表；实时卖出同时写入
+  `transactions` / `transaction_items`，分析页面使用最新营业数据。
+- 新增 `app/core/templates.py`：小票 / 库存 / 商品档案三张中文空白
+  CSV 模板（UTF-8 BOM，Excel 直接打开）。
+- 新增 `app/core/realtime.py`：`save_product` / `record_sale` /
+  `record_restock` / `record_sale_by_code` / `register_code_resolver`。
+- 数据导入页增加三个模板下载按钮。
+- 新增 `tests/test_realtime.py`，测试总数 69。
+
+### Changed
+
+- `products` 表增加 `updated_at`，旧数据库启动时自动迁移。
+- 状态栏显示库存流水条数。
+- 版本号更新到 v1.0.3。
+
+### Extension
+
+- 条形码 / NFC 通过 `register_code_resolver(source, resolver)` 注册解析器，
+  后续接硬件时不需要修改库存或 UI 逻辑。
+
 ## [1.0.2] - 2026-11-11
 
 新增第三方 OpenAI 兼容 API，作为 Ollama 本地模型的显式可选替代。
@@ -103,6 +134,7 @@
 - 暂未打包 exe / dmg。
 - 示例数据日销量波动较大，XYZ 分类多为 Z；文档中已说明。
 
+[1.0.3]: https://github.com/SBTstudio/Intelligent_Warehousing/releases/tag/v1.0.3
 [1.0.2]: https://github.com/SBTstudio/Intelligent_Warehousing/releases/tag/v1.0.2
 [1.0.1]: https://github.com/SBTstudio/Intelligent_Warehousing/releases/tag/v1.0.1
 [1.0.0]: https://github.com/SBTstudio/Intelligent_Warehousing/releases/tag/v1.0.0
