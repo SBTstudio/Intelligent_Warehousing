@@ -73,7 +73,7 @@ def test_check_for_update_selects_release_asset(monkeypatch):
     monkeypatch.setattr(
         updater.requests, "get", lambda *args, **kwargs: _FakeResponse(200, payload)
     )
-    info = updater.check_for_update("1.0.4")
+    info = updater.check_for_update("1.0.4", platform="darwin")
     assert info.has_update is True
     assert info.tag == "v1.0.5"
     assert info.asset_name in {
@@ -89,7 +89,7 @@ def test_check_for_update_same_version(monkeypatch):
         "get",
         lambda *args, **kwargs: _FakeResponse(200, {"tag_name": "v1.0.4", "assets": []}),
     )
-    info = updater.check_for_update("1.0.4")
+    info = updater.check_for_update("1.0.4", platform="darwin")
     assert info.has_update is False
 
 

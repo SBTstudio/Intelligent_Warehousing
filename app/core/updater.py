@@ -123,6 +123,7 @@ def _http_get(
 def check_for_update(
     current: str = APP_VERSION,
     timeout: int = 12,
+    platform: str | None = None,
 ) -> UpdateInfo:
     """查询 GitHub 最新 Release。始终返回 UpdateInfo，has_update 表示是否更新。"""
     try:
@@ -154,7 +155,7 @@ def check_for_update(
         raise UpdateError("Release 缺少 tag_name")
 
     assets = data.get("assets", []) or []
-    asset = asset_for_platform(assets) or {}
+    asset = asset_for_platform(assets, platform) or {}
     return UpdateInfo(
         current=current,
         latest=tag.lstrip("vV"),
