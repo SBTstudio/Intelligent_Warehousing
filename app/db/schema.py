@@ -19,7 +19,7 @@ SQLite 是 Python 标准库自带的，不需要安装任何数据库软件。
 """
 
 import sqlite3
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from datetime import datetime
 from pathlib import Path
 
@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS products (
     category   TEXT NOT NULL DEFAULT '',
     cost       REAL NOT NULL DEFAULT 0,      -- 进货成本
     price      REAL NOT NULL DEFAULT 0,      -- 零售价
-    updated_at TEXT NOT NULL DEFAULT ''      -- 最近一次档案/库存变更时间
+    updated_at TEXT NOT NULL DEFAULT '',     -- 最近一次档案/库存变更时间
+    is_active  INTEGER NOT NULL DEFAULT 1    -- 0=已删除/停用（历史保留）
 );
 
 -- 交易头：一张小票一行
@@ -157,6 +158,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute(
             "ALTER TABLE products ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''"
         )
+    if "is_active" not in columns:
+        conn.execute(
+            "ALTER TABLE products ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1"
+        )
 
 
 def analyze() -> None:
@@ -181,8 +186,8 @@ def insert_products(rows: list[dict]) -> int:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     sql = (
         "INSERT OR REPLACE INTO products "
-        "(sku_id, sku_name, category, cost, price, updated_at) "
-        "VALUES (:sku_id, :sku_name, :category, :cost, :price, :updated_at)"
+        "(sku_id, sku_name, category, cost, price, updated_at, is_active) "
+        "VALUES (:sku_id, :sku_name, :category, :cost, :price, :updated_at, 1)"
     )
     payload = [
         {
@@ -225,8 +230,8 @@ def ensure_products(sku_ids: list[str], names: dict[str, str] | None = None) -> 
     with get_conn() as conn:
         conn.executemany(
             "INSERT OR IGNORE INTO products "
-            "(sku_id, sku_name, category, cost, price, updated_at) "
-            "VALUES (:sku_id, :sku_name, :category, :cost, :price, :updated_at)",
+            "(sku_id, sku_name, category, cost, price, updated_at, is_active) "
+            "VALUES (:sku_id, :sku_name, :category, :cost, :price, :updated_at, 1)",
             payload,
         )
     return len(payload)
@@ -353,7 +358,7 @@ def fetch_inventory() -> list[dict]:
         "SELECT i.sku_id, p.sku_name, p.category, i.stock_qty, i.cost, i.snapshot_date "
         "FROM inventory i "
         "LEFT JOIN products p ON p.sku_id = i.sku_id "
-        "WHERE i.snapshot_date = ("
+        "WHERE (p.is_active IS NULL OR p.is_active = 1) AND i.snapshot_date = ("
         "    SELECT MAX(snapshot_date) FROM inventory WHERE sku_id = i.sku_id"
         ")"
     )
@@ -374,7 +379,12 @@ def fetch_reports(limit: int = 30) -> list[dict]:
 
 def fetch_products() -> list[dict]:
     with get_conn() as conn:
-        return [dict(r) for r in conn.execute("SELECT * FROM products ORDER BY sku_id")]
+        return [
+            dict(r)
+            for r in conn.execute(
+                "SELECT * FROM products WHERE is_active = 1 ORDER BY sku_id"
+            )
+        ]
 
 
 # ---------------------------------------------------------------
@@ -447,6 +457,10 @@ def db_stats() -> dict:
                 result[t] = conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
             except sqlite3.OperationalError:
                 result[t] = 0
+        with suppress(sqlite3.OperationalError):
+            result["products"] = conn.execute(
+                "SELECT COUNT(*) FROM products WHERE is_active = 1"
+            ).fetchone()[0]
         row = conn.execute("SELECT MIN(ts), MAX(ts) FROM transactions").fetchone()
     if row and row[0] and row[1]:
         start = datetime.strptime(row[0][:10], "%Y-%m-%d")

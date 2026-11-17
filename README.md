@@ -11,12 +11,12 @@
 ![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite&logoColor=white)
 ![Ollama](https://img.shields.io/badge/Ollama-local%20LLM-111111)
 ![API](https://img.shields.io/badge/OpenAI-compatible-412991)
-![Tests](https://img.shields.io/badge/tests-78%20passed-brightgreen)
+![Tests](https://img.shields.io/badge/tests-79%20passed-brightgreen)
 [![Actions](https://github.com/SBTstudio/Intelligent_Warehousing/actions/workflows/tests.yml/badge.svg)](https://github.com/SBTstudio/Intelligent_Warehousing/actions/workflows/tests.yml)
 [![Release](https://img.shields.io/github/v/release/SBTstudio/Intelligent_Warehousing)](https://github.com/SBTstudio/Intelligent_Warehousing/releases/latest)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-[功能](#功能一览) · [截图](#界面预览) · [快速开始](#快速开始) · [算法](#核心算法) · [文档](#文档) · [发布说明](docs/RELEASE_v1.0.5.md)
+[功能](#功能一览) · [截图](#界面预览) · [快速开始](#快速开始) · [算法](#核心算法) · [文档](#文档) · [发布说明](docs/RELEASE_v1.0.6.md)
 
 </div>
 
@@ -68,7 +68,7 @@ SQLite 数据库，用可解释的统计算法算出：
 | **首页** | 营业入口、库存统计、三步使用指南、精简版使用指南、检查更新 | — |
 | **收银台** | 多次扫码/手输加入同一张小票、合并数量、结账生成一笔完整订单 | 2.4.3 |
 | **数据导入** | CSV/TXT 编码自动识别、列名同义词、逐行校验、错误带行号、原始文件只读、中文空白模板下载 | 2.2.1 / 2.4.4 |
-| **实时库存 / 收银辅助** | 新增/编辑商品、卖出 -1、补货 +N、秒级时间戳流水、扫码/NFC 预留接口 | 2.4.3 / 2.5 |
+| **实时库存 / 收银辅助** | 新增/编辑商品、卖出 -1、补货 +N、删除 SKU、秒级时间戳流水、扫码/NFC 预留接口 | 2.4.3 / 2.5 |
 | **SQLite 数据层** | 7 张表、WAL、覆盖索引、幂等导入、ANALYZE、单文件备份 | 2.5 |
 | **购物篮分析** | 手写 Apriori、支持度 / 置信度 / lift、lift 热力图 | 2.1 输入量 1 |
 | **补货预测** | 指数平滑、需求波动、安全库存 SS、补货点 ROP、建议补货日/量 | 1.1 目标 1 |
@@ -198,7 +198,8 @@ ollama list
 1. 「数据导入」页可下载小票 / 库存 / 商品档案三张中文空白模板；
 2. 「实时库存」页填写商品编号、名称、品类、进价、售价、库存并保存；
 3. 表格行内「卖出 1」「补货 1」，适合快速单件操作；
-4. 所有变动都写秒级时间戳，可在「变动记录」回看。
+4. 所有变动都写秒级时间戳，可在「变动记录」回看；
+5. 要删除 SKU：在「实时库存」表格点该行「删除」，确认后商品会从库存/收银台/补货页隐藏，历史销售保留；重新保存同编号可恢复。
 
 ### 补货日期
 
@@ -427,7 +428,7 @@ Intelligent_Warehousing/
 │       ├── page_settings.py
 │       └── widgets/chart_view.py
 │
-├── tests/                     78 个自动化测试
+├── tests/                     79 个自动化测试
 ├── tools/                     假数据 / 容量压测 / 环境自检
 ├── data/sample/               120 天示例数据
 ├── screenshots/               README 截图
@@ -440,7 +441,7 @@ Intelligent_Warehousing/
 
 ```bash
 pytest -q
-# 78 passed in 0.32s
+# 79 passed in 0.32s
 ```
 
 | 测试文件 | 用例 | 内容 |
@@ -451,7 +452,7 @@ pytest -q
 | `tests/test_seasonal.py` | 7 | 同比、环比、斜率、季节指数 |
 | `tests/test_llm.py` | 19 | 降级、JSON 提取、第三方 API 协议/鉴权、任务兜底 |
 | `tests/test_updater.py` | 5 | 版本比较、平台资产选择、下载、检查更新 |
-| `tests/test_realtime.py` | 9 | 建档、卖出、补货、库存不足、扫码解析、时间戳 |
+| `tests/test_realtime.py` | 10 | 建档、卖出、补货、删除/恢复、库存不足、扫码解析、时间戳 |
 
 手工验收清单、性能数据、异常路径见 [测试报告](docs/测试报告.md)。
 
@@ -539,6 +540,7 @@ S001,青岛啤酒,饮料,3.20,5.50
 - [x] v1.0.3：实时库存 / 收银辅助、中文模板、扫码/NFC 扩展点
 - [x] v1.0.4：首页 + 收银台（一张小票多次扫码结账）、补货日基准修正
 - [x] v1.0.5：收银台选中加入、应用内检查更新
+- [x] v1.0.6：SKU 软删除 / 恢复
 - [ ] v1.1：手动逐行录入（需求 2.4.3）、按周聚合的 XYZ 判断
 - [ ] v1.2：按内存自动推荐模型档位、API 用量统计
 - [ ] v2.0：客户画像与相似用户陈列优化（M14，需真实会员数据）
@@ -552,11 +554,12 @@ S001,青岛啤酒,饮料,3.20,5.50
 | [需求分析](docs/需求分析.md) | 需求条目、追踪矩阵、验收标准 |
 | [概要设计](docs/概要设计.md) | 架构、数据模型、算法、LLM 调用链 |
 | [用户手册](docs/用户手册.md) | 安装、页面操作、数据格式、FAQ |
-| [测试报告](docs/测试报告.md) | 78 个测试、性能实测、手工验收 |
+| [测试报告](docs/测试报告.md) | 79 个测试、性能实测、手工验收 |
 | [数据存储设计](docs/数据存储设计说明.md) | 三年容量、索引、ANALYZE 实测 |
 | [功能拆解与开发路线](docs/功能拆解与开发路线.md) | 历史规划与工时 |
 | [开发分工与进度](docs/开发分工与进度.md) | 两人分工、复盘、答辩分工 |
 | [5 分钟演示脚本](docs/演示脚本.md) | 答辩现场演示流程与追问答案 |
+| [发布说明 v1.0.6](docs/RELEASE_v1.0.6.md) | SKU 删除 + 收银台改进 |
 | [发布说明 v1.0.5](docs/RELEASE_v1.0.5.md) | 收银台改进 + 应用内更新 |
 | [发布说明 v1.0.4](docs/RELEASE_v1.0.4.md) | 收银台 + 首页版本 |
 | [发布说明 v1.0.3](docs/RELEASE_v1.0.3.md) | 实时库存 / 收银辅助版本 |

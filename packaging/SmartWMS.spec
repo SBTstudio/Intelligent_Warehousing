@@ -73,8 +73,8 @@ app = BUNDLE(
     info_plist={
         "CFBundleName": "SmartWMS",
         "CFBundleDisplayName": "智能仓储管理系统",
-        "CFBundleShortVersionString": "1.0.5",
-        "CFBundleVersion": "1.0.5",
+        "CFBundleShortVersionString": "1.0.6",
+        "CFBundleVersion": "1.0.6",
         "NSHighResolutionCapable": True,
         "NSHumanReadableCopyright": "Copyright © 2026 SBTstudio",
     },

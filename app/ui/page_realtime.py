@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QSpinBox,
     QTableWidget,
@@ -39,6 +40,7 @@ ACTION_COLORS = {
     realtime.ACTION_RESTOCK: ("#E1F5EE", "#0B5542"),
     realtime.ACTION_CREATE: ("#E8F0FB", "#2F5EA8"),
     realtime.ACTION_ADJUST: ("#FAEEDA", "#6B3F0A"),
+    realtime.ACTION_DELETE: ("#F1EFE8", "#5F5E5A"),
 }
 
 
@@ -236,8 +238,17 @@ class RealtimePage(WorkPage):
             restock.clicked.connect(
                 lambda checked=False, sku=row["sku_id"]: self._quick_action(sku, "restock", 1)
             )
+            delete = QPushButton("删除")
+            delete.setProperty("variant", "danger")
+            delete.setFixedHeight(30)
+            delete.clicked.connect(
+                lambda checked=False, sku=row["sku_id"], name=row["sku_name"]: self._delete_product(
+                    sku, name
+                )
+            )
             layout.addWidget(sell)
             layout.addWidget(restock)
+            layout.addWidget(delete)
             self.tbl_inventory.setCellWidget(index, 7, container)
 
     def _fill_events(self, events: list[dict]) -> None:
@@ -348,6 +359,32 @@ class RealtimePage(WorkPage):
         self.ed_price.setText(f"{float(row['price']):.2f}")
         self.ed_stock.setText(f"{float(row['stock_qty']):g}")
         self._stock_touched = False
+        self.refresh()
+        self.data_changed.emit("realtime")
+
+    def _delete_product(self, sku: str, name: str = "") -> None:
+        answer = QMessageBox.question(
+            self,
+            "删除商品",
+            f"确定删除「{name or sku}」（{sku}）吗？\n\n"
+            "删除后该商品会从库存、收银台、补货页隐藏；\n"
+            "历史销售和库存流水会保留。\n"
+            "以后重新保存同一个 SKU 可以恢复。",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        try:
+            realtime.delete_product(sku)
+        except realtime.RealtimeError as exc:
+            style_pill(self.status, str(exc), "red")
+            self.status.setVisible(True)
+            return
+        if self.ed_sku.text().strip() == sku:
+            self._clear_form()
+        style_pill(self.status, f"已删除 {sku}（历史保留）", "green")
+        self.status.setVisible(True)
         self.refresh()
         self.data_changed.emit("realtime")
 

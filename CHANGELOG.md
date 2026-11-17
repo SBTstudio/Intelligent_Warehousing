@@ -3,6 +3,23 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.0.6] - 2026-11-17
+
+新增 SKU 软删除 / 恢复。
+
+### Added
+
+- 「实时库存」每行增加「删除」按钮；
+- 删除后商品从库存、收银台、补货页隐藏；
+- 历史销售、库存流水、报表保留；
+- 重新保存同一个 SKU 会自动恢复；
+- 新增删除/恢复测试，总计 79 passed。
+
+### Changed
+
+- `products` 增加 `is_active` 软删除标记，旧数据库自动迁移；
+- 商品列表、收银台、补货页默认只显示未删除商品。
+
 ## [1.0.5] - 2026-11-17
 
 收银台手动选择商品改进，新增应用内检查更新。
@@ -178,6 +195,7 @@
 - 暂未打包 exe / dmg。
 - 示例数据日销量波动较大，XYZ 分类多为 Z；文档中已说明。
 
+[1.0.6]: https://github.com/SBTstudio/Intelligent_Warehousing/releases/tag/v1.0.6
 [1.0.5]: https://github.com/SBTstudio/Intelligent_Warehousing/releases/tag/v1.0.5
 [1.0.4]: https://github.com/SBTstudio/Intelligent_Warehousing/releases/tag/v1.0.4
 [1.0.3]: https://github.com/SBTstudio/Intelligent_Warehousing/releases/tag/v1.0.3

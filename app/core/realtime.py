@@ -44,11 +44,13 @@ ACTION_SALE = "sale"
 ACTION_RESTOCK = "restock"
 ACTION_CREATE = "create"
 ACTION_ADJUST = "adjust"
+ACTION_DELETE = "delete"
 ACTION_LABELS = {
     ACTION_SALE: "卖出",
     ACTION_RESTOCK: "补货",
     ACTION_CREATE: "建档",
     ACTION_ADJUST: "调整",
+    ACTION_DELETE: "删除",
 }
 
 
@@ -97,12 +99,14 @@ def _source(value: str | None) -> str:
     return source if source in SOURCE_LABELS else SOURCE_MANUAL
 
 
-def _product(conn, sku_id: str):
-    return conn.execute(
-        "SELECT sku_id, sku_name, category, cost, price, updated_at "
-        "FROM products WHERE sku_id = ?",
-        (sku_id,),
-    ).fetchone()
+def _product(conn, sku_id: str, active_only: bool = True):
+    sql = (
+        "SELECT sku_id, sku_name, category, cost, price, updated_at, is_active "
+        "FROM products WHERE sku_id = ?"
+    )
+    if active_only:
+        sql += " AND is_active = 1"
+    return conn.execute(sql, (sku_id,)).fetchone()
 
 
 def _latest_stock(conn, sku_id: str) -> float | None:
@@ -229,7 +233,7 @@ def save_product(
     category_value = str(category or "").strip()
 
     with schema.get_conn() as conn:
-        existing = _product(conn, sku)
+        existing = _product(conn, sku, active_only=False)
         if existing is None:
             conn.execute(
                 "INSERT INTO products "
@@ -254,7 +258,7 @@ def save_product(
         else:
             conn.execute(
                 "UPDATE products SET sku_name = ?, category = ?, cost = ?, price = ?, "
-                "updated_at = ? WHERE sku_id = ?",
+                "is_active = 1, updated_at = ? WHERE sku_id = ?",
                 (name, category_value, cost_value, price_value, ts_text, sku),
             )
             if target_stock is not None:
@@ -556,6 +560,58 @@ def checkout_cart(
 
 
 # =====================================================================
+# 删除 / 停用商品
+# =====================================================================
+def delete_product(
+    sku_id: str,
+    ts: str | datetime | date | None = None,
+    source: str = SOURCE_MANUAL,
+) -> dict[str, Any]:
+    """删除（停用）商品。
+
+    采用软删除：商品从库存、收银台、补货页隐藏，但历史销售和流水保留。
+    重新保存同一个 SKU 会自动恢复。
+    """
+    sku = str(sku_id or "").strip()
+    if not sku:
+        raise RealtimeError("商品编号不能为空")
+    ts_text = _now(ts)
+    with schema.get_conn() as conn:
+        product = _product(conn, sku, active_only=False)
+        if product is None:
+            raise ProductNotFound(f"商品 {sku} 不存在")
+        if not int(product["is_active"]):
+            return {
+                "sku_id": sku,
+                "sku_name": product["sku_name"],
+                "deleted": True,
+                "already_deleted": True,
+            }
+        conn.execute(
+            "UPDATE products SET is_active = 0, updated_at = ? WHERE sku_id = ?",
+            (ts_text, sku),
+        )
+        _log_event(
+            conn,
+            sku_id=sku,
+            ts=ts_text,
+            action=ACTION_DELETE,
+            delta=0.0,
+            stock_after=_latest_stock(conn, sku) or 0.0,
+            unit_price=float(product["price"]),
+            cost=float(product["cost"]),
+            source=_source(source),
+            note="删除商品（历史保留）",
+        )
+    return {
+        "sku_id": sku,
+        "sku_name": product["sku_name"],
+        "deleted": True,
+        "already_deleted": False,
+    }
+
+
+# =====================================================================
 # 扫码 / NFC 扩展点
 # =====================================================================
 _CODE_RESOLVERS: dict[str, Callable[[str], str | None]] = {}
@@ -585,7 +641,8 @@ def resolve_code(code: str, source: str = SOURCE_MANUAL) -> str | None:
             return str(resolved)
     with schema.get_conn() as conn:
         row = conn.execute(
-            "SELECT sku_id FROM products WHERE sku_id = ? OR sku_name = ? LIMIT 1",
+            "SELECT sku_id FROM products "
+            "WHERE is_active = 1 AND (sku_id = ? OR sku_name = ?) LIMIT 1",
             (text, text),
         ).fetchone()
     return None if row is None else str(row["sku_id"])
@@ -617,6 +674,7 @@ def inventory_rows() -> list[dict[str, Any]]:
         "LEFT JOIN inventory i ON i.sku_id = p.sku_id AND i.snapshot_date = ("
         "    SELECT MAX(snapshot_date) FROM inventory WHERE sku_id = p.sku_id"
         ") "
+        "WHERE p.is_active = 1 "
         "ORDER BY p.sku_id"
     )
     with schema.get_conn() as conn:

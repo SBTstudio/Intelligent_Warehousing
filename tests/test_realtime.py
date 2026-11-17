@@ -160,3 +160,21 @@ def test_checkout_cart_is_atomic_when_one_item_short(temp_db):
     inv = {row["sku_id"]: row["stock_qty"] for row in realtime.inventory_rows()}
     assert inv["S201"] == 5.0 and inv["S202"] == 1.0
     assert schema.fetch_sales() == []
+
+
+def test_delete_product_is_soft_and_can_be_restored(temp_db):
+    realtime.save_product("S301", "待删除", "测试", 1, 2, 5)
+    realtime.record_sale("S301", qty=1)
+    deleted = realtime.delete_product("S301")
+    assert deleted["deleted"] is True
+    assert all(row["sku_id"] != "S301" for row in realtime.inventory_rows())
+    assert all(row["sku_id"] != "S301" for row in schema.fetch_products())
+    # 历史销售仍然在，商品名还能 join 出来
+    assert schema.fetch_sales()[0]["sku_name"] == "待删除"
+    with pytest.raises(realtime.ProductNotFound):
+        realtime.record_sale("S301")
+    # 重新保存即可恢复
+    realtime.save_product("S301", "恢复商品", "测试", 1.5, 2.5, 3)
+    rows = {row["sku_id"]: row for row in realtime.inventory_rows()}
+    assert rows["S301"]["sku_name"] == "恢复商品"
+    assert rows["S301"]["stock_qty"] == 3.0

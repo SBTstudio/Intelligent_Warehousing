@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag (e.g. v1.0.5)"
+        description: "Release tag (e.g. v1.0.6)"
         required: true
-        default: "v1.0.5"
+        default: "v1.0.6"
 
 permissions:
   contents: write
@@ -109,8 +109,8 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          name: "v1.0.5 — 收银台改进 + 应用内更新"
-          body_path: docs/RELEASE_v1.0.5.md
+          name: "v1.0.6 — 商品删除 + 收银台改进"
+          body_path: docs/RELEASE_v1.0.6.md
           files: |
             artifacts/SmartWMS-Windows-x64.exe
             artifacts/SmartWMS-macOS-arm64.dmg

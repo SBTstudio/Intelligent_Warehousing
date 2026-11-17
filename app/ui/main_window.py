@@ -128,7 +128,7 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(brand)
 
-        subtitle = QLabel("SMART WMS  ·  v1.0.5")
+        subtitle = QLabel(f"SMART WMS  ·  v{APP_VERSION}")
         subtitle.setStyleSheet(
             f"color: {COLORS['muted']}; font-size: 10px; padding-left: 23px;"
             "letter-spacing: 1px; background: transparent;"
