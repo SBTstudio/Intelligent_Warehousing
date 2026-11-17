@@ -5,22 +5,26 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
+    QProgressDialog,
     QPushButton,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
-from app.core import realtime
+from app.core import realtime, updater
 from app.db import schema
 from app.ui.base_page import WorkPage
 from app.ui.helpers import hint_label
 from app.ui.theme import COLORS
+from app.ui.worker import FunctionWorker, stop_worker
+from app.version import APP_VERSION
 
 GUIDE_TEXT = """智能仓储管理系统 · 精简版使用指南
 
@@ -61,6 +65,34 @@ GUIDE_TEXT = """智能仓储管理系统 · 精简版使用指南
 
 更完整的说明见 docs/用户手册.md。
 """
+
+
+class DownloadWorker(QThread):
+    progress = Signal(int, int)
+    succeeded = Signal(str)
+    failed = Signal(str)
+
+    def __init__(self, info: updater.UpdateInfo, parent=None):
+        super().__init__(parent)
+        self.info = info
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        self._cancelled = True
+
+    def run(self) -> None:  # noqa: D401
+        try:
+            path = updater.download_update(
+                self.info,
+                progress=lambda done, total: self.progress.emit(done, total),
+                cancel_check=lambda: self._cancelled,
+            )
+        except updater.UpdateCancelled:
+            self.failed.emit("已取消下载")
+        except Exception as exc:
+            self.failed.emit(str(exc))
+        else:
+            self.succeeded.emit(str(path))
 
 
 class GuideDialog(QDialog):
@@ -133,10 +165,13 @@ class HomePage(WorkPage):
         btn_import.setProperty("variant", "ghost")
         btn_guide = QPushButton("查看精简版使用指南")
         btn_guide.setProperty("variant", "ghost")
+        self.btn_update = QPushButton("检查更新")
+        self.btn_update.setProperty("variant", "ghost")
         actions.addWidget(btn_cashier)
         actions.addWidget(btn_realtime)
         actions.addWidget(btn_import)
         actions.addWidget(btn_guide)
+        actions.addWidget(self.btn_update)
         actions.addStretch(1)
         self.body.addLayout(actions)
 
@@ -144,6 +179,7 @@ class HomePage(WorkPage):
         btn_realtime.clicked.connect(lambda: self.navigate.emit("realtime"))
         btn_import.clicked.connect(lambda: self.navigate.emit("import"))
         btn_guide.clicked.connect(self._show_guide)
+        self.btn_update.clicked.connect(self._check_update)
 
         steps = QHBoxLayout()
         steps.setSpacing(10)
@@ -168,11 +204,15 @@ class HomePage(WorkPage):
         self.body.addLayout(steps)
 
         self.lbl_tip = hint_label(
-            "提示：入库、卖出、补货都会记录时间戳；库存不足会拒绝操作，不会产生半张订单。"
+            f"当前版本 v{APP_VERSION}。提示：入库、卖出、补货都会记录时间戳；"
+            "库存不足会拒绝操作，不会产生半张订单。"
         )
         self.body.addWidget(self.lbl_tip)
         self.body.addStretch(1)
 
+        self._check_worker: FunctionWorker | None = None
+        self._download_worker: DownloadWorker | None = None
+        self._progress: QProgressDialog | None = None
         self.refresh()
 
     # ==========================================================
@@ -233,6 +273,129 @@ class HomePage(WorkPage):
             )
         except Exception:
             pass
+
+    # ==========================================================
+    # 检查更新
+    # ==========================================================
+    def _check_update(self) -> None:
+        if self._check_worker is not None and self._check_worker.isRunning():
+            return
+        self.btn_update.setEnabled(False)
+        self.btn_update.setText("检查中…")
+        self.lbl_tip.setText("正在向 GitHub 查询最新版本…")
+
+        self._check_worker = FunctionWorker(lambda: updater.check_for_update(APP_VERSION))
+        self._check_worker.succeeded.connect(self._on_update_checked)
+        self._check_worker.failed.connect(self._on_update_error)
+        self._check_worker.start()
+
+    def _restore_update_button(self) -> None:
+        self.btn_update.setEnabled(True)
+        self.btn_update.setText("检查更新")
+
+    def _on_update_checked(self, info) -> None:
+        self._restore_update_button()
+        if not info.has_update:
+            self.lbl_tip.setText(f"已是最新版本 v{APP_VERSION}")
+            QMessageBox.information(self, "检查更新", f"当前已是最新版本 v{APP_VERSION}。")
+            return
+
+        notes = (info.notes or "").strip()
+        if len(notes) > 500:
+            notes = notes[:500] + "…"
+        detail = f"当前版本：v{APP_VERSION}\n最新版本：{info.tag}\n\n{notes}"
+        if not info.asset_name:
+            answer = QMessageBox.question(
+                self,
+                "发现新版本",
+                detail + "\n\n该版本没有当前平台的安装包，是否打开 Release 页面？",
+            )
+            if answer == QMessageBox.Yes:
+                updater.open_release_page(info.html_url)
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "发现新版本",
+            detail + f"\n\n安装包：{info.asset_name}\n是否下载并打开安装包？",
+        )
+        if answer == QMessageBox.Yes:
+            self._download_update(info)
+
+    def _on_update_error(self, message: str) -> None:
+        self._restore_update_button()
+        self.lbl_tip.setText(f"检查更新失败：{message}")
+        QMessageBox.warning(self, "检查更新失败", message)
+
+    def _download_update(self, info) -> None:
+        if self._download_worker is not None and self._download_worker.isRunning():
+            return
+        progress = QProgressDialog(
+            f"正在下载 {info.asset_name}…", "取消", 0, 100, self
+        )
+        progress.setWindowTitle("下载更新")
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.setValue(0)
+        progress.show()
+        self._progress = progress
+
+        worker = DownloadWorker(info, self)
+        worker.progress.connect(self._on_download_progress)
+        worker.succeeded.connect(self._on_download_done)
+        worker.failed.connect(self._on_download_failed)
+        progress.canceled.connect(worker.cancel)
+        self._download_worker = worker
+        worker.start()
+
+    def _on_download_progress(self, done: int, total: int) -> None:
+        if self._progress is None:
+            return
+        if total > 0:
+            self._progress.setValue(min(100, int(done * 100 / total)))
+            self._progress.setLabelText(
+                f"正在下载… {done / 1024 / 1024:.1f} / {total / 1024 / 1024:.1f} MB"
+            )
+        else:
+            self._progress.setLabelText(f"正在下载… {done / 1024 / 1024:.1f} MB")
+
+    def _close_progress(self) -> None:
+        if self._progress is not None:
+            self._progress.close()
+            self._progress = None
+
+    def _on_download_done(self, path: str) -> None:
+        self._close_progress()
+        try:
+            updater.launch_installer(path)
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "安装包已下载",
+                f"安装包保存在：\n{path}\n\n自动打开失败：{exc}\n请手动打开该文件。",
+            )
+            return
+        self.lbl_tip.setText(f"新版本已下载：{path}")
+        QMessageBox.information(
+            self,
+            "更新已下载",
+            "安装包已打开。\n\n"
+            "Windows：按提示完成安装后，关闭当前窗口再启动新版本。\n"
+            "macOS：把 SmartWMS 拖进 Applications 覆盖旧版本。\n\n"
+            f"文件位置：\n{path}",
+        )
+
+    def _on_download_failed(self, message: str) -> None:
+        self._close_progress()
+        self.lbl_tip.setText(f"下载更新失败：{message}")
+        if message != "已取消下载":
+            QMessageBox.warning(self, "下载更新失败", message)
+
+    def shutdown(self) -> None:
+        stop_worker(self._check_worker)
+        if self._download_worker is not None:
+            self._download_worker.cancel()
+            stop_worker(self._download_worker)
 
     def _show_guide(self) -> None:
         GuideDialog(self).exec()

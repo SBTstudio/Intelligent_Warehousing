@@ -74,7 +74,8 @@ class CashierPage(WorkPage):
         self.body.addLayout(scan_row)
 
         self.lbl_hint = hint_label(
-            "提示：同一 SKU 会合并数量；结账前会先校验库存，库存不足不会生成半张订单。"
+            "提示：单击商品行选中后点「加入选中商品」，或直接双击/点行内「加入」；"
+            "同一 SKU 会合并数量，结账前会校验库存。"
         )
         self.body.addWidget(self.lbl_hint)
 
@@ -95,15 +96,20 @@ class CashierPage(WorkPage):
         self.btn_refresh.setProperty("variant", "ghost")
         self.btn_refresh.clicked.connect(self.refresh)
         left_top.addWidget(self.btn_refresh)
+        self.btn_add_selected = QPushButton("加入选中商品")
+        self.btn_add_selected.setEnabled(False)
+        self.btn_add_selected.clicked.connect(self._add_selected_product)
+        left_top.addWidget(self.btn_add_selected)
         left_layout.addLayout(left_top)
 
         self.tbl_products = QTableWidget()
         setup_table(
             self.tbl_products,
-            ["SKU", "商品名", "售价", "当前库存"],
-            {0: 90, 1: 170, 2: 80},
+            ["SKU", "商品名", "售价", "当前库存", "操作"],
+            {0: 75, 1: 130, 2: 65, 3: 75, 4: 60},
         )
         self.tbl_products.doubleClicked.connect(self._add_selected_product)
+        self.tbl_products.itemSelectionChanged.connect(self._update_selected_button)
         left_layout.addWidget(self.tbl_products, 1)
         splitter.addWidget(left)
 
@@ -165,8 +171,17 @@ class CashierPage(WorkPage):
         self._render_cart()
 
     def _render_products(self) -> None:
+        for r in range(self.tbl_products.rowCount()):
+            old = self.tbl_products.cellWidget(r, 4)
+            if old is not None:
+                old.hide()
+                self.tbl_products.removeCellWidget(r, 4)
+                old.setParent(None)
+                old.deleteLater()
+
         keyword = self.ed_search.text().strip().lower()
         rows = []
+        visible_products = []
         for product in self._products:
             haystack = " ".join(
                 [
@@ -177,15 +192,32 @@ class CashierPage(WorkPage):
             ).lower()
             if keyword and keyword not in haystack:
                 continue
+            visible_products.append(product)
             rows.append(
                 [
                     product["sku_id"],
                     product["sku_name"] or "—",
                     f"¥{float(product['price']):.2f}",
                     f"{float(product['stock_qty']):g}",
+                    "",
                 ]
             )
         fill_table(self.tbl_products, rows, numeric_columns={2, 3})
+        self.tbl_products.verticalHeader().setDefaultSectionSize(36)
+        for index, product in enumerate(visible_products):
+            container = QWidget()
+            layout = QHBoxLayout(container)
+            layout.setContentsMargins(2, 1, 2, 1)
+            add = QPushButton("加入")
+            add.setFixedHeight(28)
+            add.clicked.connect(
+                lambda checked=False, sku=product["sku_id"]: self._add_sku(
+                    sku, self.sp_qty.value()
+                )
+            )
+            layout.addWidget(add)
+            self.tbl_products.setCellWidget(index, 4, container)
+        self._update_selected_button()
 
     def _render_cart(self) -> None:
         for r in range(self.tbl_cart.rowCount()):
@@ -294,6 +326,10 @@ class CashierPage(WorkPage):
         self._add_sku(sku, self.sp_qty.value())
         self.ed_code.clear()
         self.ed_code.setFocus()
+
+    def _update_selected_button(self) -> None:
+        enabled = bool(self.tbl_products.selectedItems())
+        self.btn_add_selected.setEnabled(enabled)
 
     def _add_selected_product(self, *args) -> None:
         row = self.tbl_products.currentRow()

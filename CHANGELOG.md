@@ -3,6 +3,26 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.0.5] - 2026-11-17
+
+收银台手动选择商品改进，新增应用内检查更新。
+
+### Added
+
+- 收银台商品列表增加「操作 / 加入」列；
+- 选中商品后点「加入选中商品」即可加入小票，双击仍然可用；
+- 首页新增「检查更新」：
+  - 查询 GitHub 最新 Release；
+  - 比较版本号；
+  - 下载当前平台 exe / dmg；
+  - 下载完成自动打开安装包。
+- 新增 `app/core/updater.py` 与 `tests/test_updater.py`，测试总数 78。
+
+### Changed
+
+- 首页提示显示当前版本号。
+- 版本号更新到 v1.0.5。
+
 ## [1.0.4] - 2026-11-17
 
 新增收银台、首页指南，修正补货日期基准。
@@ -158,6 +178,7 @@
 - 暂未打包 exe / dmg。
 - 示例数据日销量波动较大，XYZ 分类多为 Z；文档中已说明。
 
+[1.0.5]: https://github.com/SBTstudio/Intelligent_Warehousing/releases/tag/v1.0.5
 [1.0.4]: https://github.com/SBTstudio/Intelligent_Warehousing/releases/tag/v1.0.4
 [1.0.3]: https://github.com/SBTstudio/Intelligent_Warehousing/releases/tag/v1.0.3
 [1.0.2]: https://github.com/SBTstudio/Intelligent_Warehousing/releases/tag/v1.0.2

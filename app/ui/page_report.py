@@ -32,6 +32,7 @@ from app.llm.client import get_client
 from app.ui.base_page import WorkPage
 from app.ui.helpers import hint_label, pill, style_pill
 from app.ui.worker import FunctionWorker
+from app.version import APP_VERSION
 
 REPORT_TYPES = [
     ("weekly", "经营周报"),
@@ -331,7 +332,7 @@ class ReportPage(WorkPage):
             {
                 "generated_by": client.provider,
                 "app": "SmartWMS",
-                "version": "1.0.4",
+                "version": APP_VERSION,
             },
             ensure_ascii=False,
         )

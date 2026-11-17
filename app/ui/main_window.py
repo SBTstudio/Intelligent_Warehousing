@@ -32,8 +32,9 @@ from app.ui.page_report import ReportPage
 from app.ui.page_settings import SettingsPage
 from app.ui.theme import COLORS
 from app.ui.worker import FunctionWorker, stop_worker
+from app.version import APP_VERSION
 
-VERSION = "1.0.4"
+VERSION = APP_VERSION
 NAV_LABELS = [
     "首页",
     "收银台",
@@ -127,7 +128,7 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(brand)
 
-        subtitle = QLabel("SMART WMS  ·  v1.0.4")
+        subtitle = QLabel("SMART WMS  ·  v1.0.5")
         subtitle.setStyleSheet(
             f"color: {COLORS['muted']}; font-size: 10px; padding-left: 23px;"
             "letter-spacing: 1px; background: transparent;"
