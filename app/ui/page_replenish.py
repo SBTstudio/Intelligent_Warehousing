@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import time
+from datetime import date
 
 from PySide6.QtWidgets import (
     QComboBox,
@@ -156,6 +157,7 @@ class ReplenishPage(WorkPage):
                 lead_time_days=lead_time,
                 service_level=service_level,
                 replenish_days=replenish_days,
+                today=date.today(),
             )
             profiles = classify.analyze(records, inventory, slow_turnover_days=slow_days)
             series_map = {
@@ -197,6 +199,7 @@ class ReplenishPage(WorkPage):
         )
         self.status.setVisible(True)
         self.lbl_meta.setText(
+            f"计算基准日 {date.today().isoformat()}（不按小票日期）　"
             f"提前期 {self._lead_time()} 天　服务水平 {self._service_level():.2%}"
             f"　耗时 {elapsed:.2f} 秒"
         )
@@ -222,7 +225,7 @@ class ReplenishPage(WorkPage):
                     "—" if item.daily_sales <= 0 else fmt_num(item.days_left, 1),
                     item.suggest_date.strftime("%Y-%m-%d") if item.suggest_date else "—",
                     fmt_num(item.suggest_qty, 0),
-                    "需补货" if urgent else "正常",
+                    ("需补货（已逾期）" if item.overdue else "需补货") if urgent else "正常",
                 ]
             )
             if urgent:

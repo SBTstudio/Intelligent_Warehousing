@@ -71,6 +71,7 @@ class ReplenishSuggestion:
     urgent: bool = False  # 是否已低于补货点
     sample_days: int = 0  # 参与计算的有效销售天数
     note: str = ""  # 数据不足等提示
+    overdue: bool = False  # 计算出的补货日已经早于今天
 
 
 def z_for(service_level: float) -> float:
@@ -245,7 +246,13 @@ def build_suggestion(
         )
 
     days_left = (stock - safety_stock) / daily
-    suggest_date = today + timedelta(days=days_left - lead_time)
+    raw_suggest_date = today + timedelta(days=days_left - lead_time)
+    # 补货日以"打开软件的今天"为基准：已经算到过去的日期不再显示历史日期，
+    # 统一落到今天，表示"现在就该补"。
+    overdue = raw_suggest_date < today
+    suggest_date = max(today, raw_suggest_date)
+    if overdue:
+        note = (note + "；" if note else "") + "库存已低于安全库存，建议立即补货"
     # 建议量 = 覆盖一个「到货提前期 + 补货周期」的需求 + 安全库存 - 现有库存
     target_stock = daily * (lead_time + max(1, int(replenish_days))) + safety_stock
     suggest_qty = max(0.0, target_stock - stock)
@@ -264,6 +271,7 @@ def build_suggestion(
         urgent=stock <= reorder_point,
         sample_days=len(clean),
         note=note,
+        overdue=overdue,
     )
 
 
@@ -283,6 +291,7 @@ def build_all_suggestions(
     返回
         list[ReplenishSuggestion]，urgent 的排前面，其次按剩余可售天数升序
     """
+    today = today or date.today()
     # 先按 SKU 分组，避免对每个 SKU 都全量扫一遍销售明细（O(SKU × 行数)）
     grouped: dict[str, list[dict]] = {}
     names: dict[str, str] = {}

@@ -11,12 +11,12 @@
 ![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite&logoColor=white)
 ![Ollama](https://img.shields.io/badge/Ollama-local%20LLM-111111)
 ![API](https://img.shields.io/badge/OpenAI-compatible-412991)
-![Tests](https://img.shields.io/badge/tests-69%20passed-brightgreen)
+![Tests](https://img.shields.io/badge/tests-73%20passed-brightgreen)
 [![Actions](https://github.com/SBTstudio/Intelligent_Warehousing/actions/workflows/tests.yml/badge.svg)](https://github.com/SBTstudio/Intelligent_Warehousing/actions/workflows/tests.yml)
 [![Release](https://img.shields.io/github/v/release/SBTstudio/Intelligent_Warehousing)](https://github.com/SBTstudio/Intelligent_Warehousing/releases/latest)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-[功能](#功能一览) · [截图](#界面预览) · [快速开始](#快速开始) · [算法](#核心算法) · [文档](#文档) · [发布说明](docs/RELEASE_v1.0.3.md)
+[功能](#功能一览) · [截图](#界面预览) · [快速开始](#快速开始) · [算法](#核心算法) · [文档](#文档) · [发布说明](docs/RELEASE_v1.0.4.md)
 
 </div>
 
@@ -65,6 +65,8 @@ SQLite 数据库，用可解释的统计算法算出：
 
 | 模块 | 能力 | 对应需求 |
 |---|---|---|
+| **首页** | 营业入口、库存统计、三步使用指南、精简版使用指南弹窗 | — |
+| **收银台** | 多次扫码/手输加入同一张小票、合并数量、结账生成一笔完整订单 | 2.4.3 |
 | **数据导入** | CSV/TXT 编码自动识别、列名同义词、逐行校验、错误带行号、原始文件只读、中文空白模板下载 | 2.2.1 / 2.4.4 |
 | **实时库存 / 收银辅助** | 新增/编辑商品、卖出 -1、补货 +N、秒级时间戳流水、扫码/NFC 预留接口 | 2.4.3 / 2.5 |
 | **SQLite 数据层** | 7 张表、WAL、覆盖索引、幂等导入、ANALYZE、单文件备份 | 2.5 |
@@ -87,9 +89,17 @@ SQLite 数据库，用可解释的统计算法算出：
 
 ## 界面预览
 
+| 首页：营业入口 + 精简指南 | 收银台：一张小票多次扫码 |
+|---|---|
+| ![首页](screenshots/13-home.png) | ![收银台](screenshots/14-cashier.png) |
+
 | 数据导入：校验 + 预览 + 中文模板 | 实时库存：建档 / 卖出 / 补货 |
 |---|---|
 | ![数据导入](screenshots/11-import-templates.png) | ![实时库存](screenshots/10-realtime.png) |
+
+| 实时库存：进价 / 售价 / 库存默认为空白占位提示 |
+|---|
+| ![实时库存空白输入](screenshots/15-realtime-empty-form.png) |
 
 | 购物篮分析：规则 + 热力图 | 库存与补货：紧急行标红 |
 |---|---|
@@ -169,17 +179,29 @@ ollama list
 
 ---
 
-## 营业中怎么用（实时库存）
+## 营业中怎么用（收银台 + 实时库存）
 
-这个软件不只做事后分析，营业过程中可以直接当"收银机补充"使用：
+这个软件不只做事后分析，营业过程中可以直接当"收银机补充"使用。
 
-1. 「数据导入」页下载 **小票 / 库存 / 商品档案** 三张中文空白模板；
-2. 在「实时库存」页填写商品编号、名称、品类、进价、售价、当前库存，点「保存 / 更新商品」；
-3. 在「当前库存」表格里：
-   - 点「卖出 1」→ 库存 -1，同时写销售流水和秒级时间戳；
-   - 点「补货 1」→ 库存 +1，同时写补货流水；
-4. 顶部「扫码 / 手输」框支持输入 SKU、商品名或条码；来源可选手动 / 条形码 / NFC；
-5. 所有变动在「变动记录」页签按时间倒序可查，包含订单号、来源、变动后库存。
+### 一张小票多次扫码
+
+1. 打开「收银台」；
+2. 顶部输入 SKU、商品名或条码，按回车加入当前小票；
+3. 同一张小票可以连续加多种商品，同一 SKU 会合并数量；
+4. 点「结账」后，生成 **一个 order_id + 多条商品明细** 的完整订单；
+5. 库存不足时拒绝结账，不会产生半张订单；结账成功后所有分析页面自动刷新。
+
+### 商品档案与单项操作
+
+1. 「数据导入」页可下载小票 / 库存 / 商品档案三张中文空白模板；
+2. 「实时库存」页填写商品编号、名称、品类、进价、售价、库存并保存；
+3. 表格行内「卖出 1」「补货 1」，适合快速单件操作；
+4. 所有变动都写秒级时间戳，可在「变动记录」回看。
+
+### 补货日期
+
+「库存与补货」的补货日以**打开软件的今天**为基准，不按小票日期；
+如果算出的日期已经过去，会落到今天并标记「需补货（已逾期）」。
 
 ### 条形码 / NFC 扩展点
 
@@ -195,7 +217,7 @@ realtime.register_code_resolver("barcode", resolve_barcode)
 realtime.record_sale_by_code("6901234567890", source="barcode")
 ```
 
-以后接条码枪或 NFC 读卡器时，只需要注册一个 resolver，UI 和库存/销售逻辑不用改。
+收银台和实时库存都走同一个接口，后续接条码枪或 NFC 读卡器不需要改业务逻辑。
 
 ---
 
@@ -384,6 +406,8 @@ Intelligent_Warehousing/
 │   └── ui/                    界面层
 │       ├── main_window.py     导航 / 状态栏 / 信号联动
 │       ├── theme.py           全局 QSS / 配色 / 字体
+│       ├── page_home.py       首页 / 精简指南
+│       ├── page_cashier.py    收银台（购物车 + 结账）
 │       ├── page_import.py
 │       ├── page_realtime.py   实时库存 / 收银辅助
 │       ├── page_basket.py
@@ -392,7 +416,7 @@ Intelligent_Warehousing/
 │       ├── page_settings.py
 │       └── widgets/chart_view.py
 │
-├── tests/                     69 个自动化测试
+├── tests/                     73 个自动化测试
 ├── tools/                     假数据 / 容量压测 / 环境自检
 ├── data/sample/               120 天示例数据
 ├── screenshots/               README 截图
@@ -405,17 +429,17 @@ Intelligent_Warehousing/
 
 ```bash
 pytest -q
-# 69 passed in 0.33s
+# 73 passed in 0.32s
 ```
 
 | 测试文件 | 用例 | 内容 |
 |---|---:|---|
-| `tests/test_algorithms.py` | 16 | Apriori、补货、ABC/XYZ、埋入关系 |
+| `tests/test_algorithms.py` | 18 | Apriori、补货、ABC/XYZ、埋入关系 |
 | `tests/test_data_layer.py` | 8 | 建表、读写、幂等、配置 |
 | `tests/test_ingest.py` | 12 | 编码、列名、脏数据、只读、中文模板 |
 | `tests/test_seasonal.py` | 7 | 同比、环比、斜率、季节指数 |
 | `tests/test_llm.py` | 19 | 降级、JSON 提取、第三方 API 协议/鉴权、任务兜底 |
-| `tests/test_realtime.py` | 7 | 建档、卖出、补货、库存不足、扫码解析、时间戳 |
+| `tests/test_realtime.py` | 9 | 建档、卖出、补货、库存不足、扫码解析、时间戳 |
 
 手工验收清单、性能数据、异常路径见 [测试报告](docs/测试报告.md)。
 
@@ -501,6 +525,7 @@ S001,青岛啤酒,饮料,3.20,5.50
 - [x] v1.0.1：Windows exe / macOS dmg 打包与 Release 自动构建
 - [x] v1.0.2：新增第三方 OpenAI 兼容 API（DeepSeek / 通义 / OpenAI 等）
 - [x] v1.0.3：实时库存 / 收银辅助、中文模板、扫码/NFC 扩展点
+- [x] v1.0.4：首页 + 收银台（一张小票多次扫码结账）、补货日基准修正
 - [ ] v1.1：手动逐行录入（需求 2.4.3）、按周聚合的 XYZ 判断
 - [ ] v1.2：按内存自动推荐模型档位、API 用量统计
 - [ ] v2.0：客户画像与相似用户陈列优化（M14，需真实会员数据）
@@ -514,11 +539,12 @@ S001,青岛啤酒,饮料,3.20,5.50
 | [需求分析](docs/需求分析.md) | 需求条目、追踪矩阵、验收标准 |
 | [概要设计](docs/概要设计.md) | 架构、数据模型、算法、LLM 调用链 |
 | [用户手册](docs/用户手册.md) | 安装、页面操作、数据格式、FAQ |
-| [测试报告](docs/测试报告.md) | 69 个测试、性能实测、手工验收 |
+| [测试报告](docs/测试报告.md) | 73 个测试、性能实测、手工验收 |
 | [数据存储设计](docs/数据存储设计说明.md) | 三年容量、索引、ANALYZE 实测 |
 | [功能拆解与开发路线](docs/功能拆解与开发路线.md) | 历史规划与工时 |
 | [开发分工与进度](docs/开发分工与进度.md) | 两人分工、复盘、答辩分工 |
 | [5 分钟演示脚本](docs/演示脚本.md) | 答辩现场演示流程与追问答案 |
+| [发布说明 v1.0.4](docs/RELEASE_v1.0.4.md) | 收银台 + 首页版本 |
 | [发布说明 v1.0.3](docs/RELEASE_v1.0.3.md) | 实时库存 / 收银辅助版本 |
 | [发布说明 v1.0.2](docs/RELEASE_v1.0.2.md) | 第三方 API 接入版本 |
 | [发布说明 v1.0.1](docs/RELEASE_v1.0.1.md) | Windows / macOS 安装包 |

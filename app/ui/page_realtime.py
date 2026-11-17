@@ -10,9 +10,9 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
+from PySide6.QtGui import QDoubleValidator
 from PySide6.QtWidgets import (
     QComboBox,
-    QDoubleSpinBox,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -78,17 +78,17 @@ class RealtimePage(WorkPage):
         self.ed_category = QLineEdit()
         self.ed_category.setPlaceholderText("品类，如 饮料")
 
-        self.sp_cost = QDoubleSpinBox()
-        self.sp_cost.setRange(0, 999999)
-        self.sp_cost.setDecimals(2)
-        self.sp_cost.setPrefix("¥ ")
-        self.sp_price = QDoubleSpinBox()
-        self.sp_price.setRange(0, 999999)
-        self.sp_price.setDecimals(2)
-        self.sp_price.setPrefix("¥ ")
-        self.sp_stock = QDoubleSpinBox()
-        self.sp_stock.setRange(0, 9999999)
-        self.sp_stock.setDecimals(2)
+        validator = QDoubleValidator(0, 9999999, 2, self)
+        validator.setNotation(QDoubleValidator.StandardNotation)
+        self.ed_cost = QLineEdit()
+        self.ed_cost.setPlaceholderText("进价，如 3.20")
+        self.ed_cost.setValidator(validator)
+        self.ed_price = QLineEdit()
+        self.ed_price.setPlaceholderText("售价，如 5.50")
+        self.ed_price.setValidator(validator)
+        self.ed_stock = QLineEdit()
+        self.ed_stock.setPlaceholderText("当前库存，如 20")
+        self.ed_stock.setValidator(validator)
 
         grid.addWidget(QLabel("商品编号"), 1, 0)
         grid.addWidget(self.ed_sku, 1, 1)
@@ -98,11 +98,11 @@ class RealtimePage(WorkPage):
         grid.addWidget(self.ed_category, 1, 5)
 
         grid.addWidget(QLabel("进价"), 2, 0)
-        grid.addWidget(self.sp_cost, 2, 1)
+        grid.addWidget(self.ed_cost, 2, 1)
         grid.addWidget(QLabel("售价"), 2, 2)
-        grid.addWidget(self.sp_price, 2, 3)
+        grid.addWidget(self.ed_price, 2, 3)
         grid.addWidget(QLabel("库存"), 2, 4)
-        grid.addWidget(self.sp_stock, 2, 5)
+        grid.addWidget(self.ed_stock, 2, 5)
 
         self.btn_save = QPushButton("保存 / 更新商品")
         self.btn_load = QPushButton("载入选中商品")
@@ -164,7 +164,7 @@ class RealtimePage(WorkPage):
         self.tabs.addTab(self.tbl_events, "变动记录")
         self.body.addWidget(self.tabs, 1)
 
-        self.sp_stock.valueChanged.connect(self._mark_stock_touched)
+        self.ed_stock.textEdited.connect(self._mark_stock_touched)
         self.btn_save.clicked.connect(self._save_product)
         self.btn_load.clicked.connect(self._load_selected)
         self.btn_clear.clicked.connect(self._clear_form)
@@ -283,9 +283,9 @@ class RealtimePage(WorkPage):
                 self.ed_sku.setText(row["sku_id"])
                 self.ed_name.setText(row["sku_name"] or "")
                 self.ed_category.setText(row["category"] or "")
-                self.sp_cost.setValue(float(row["cost"]))
-                self.sp_price.setValue(float(row["price"]))
-                self.sp_stock.setValue(float(row["stock_qty"]))
+                self.ed_cost.setText(f"{float(row['cost']):.2f}")
+                self.ed_price.setText(f"{float(row['price']):.2f}")
+                self.ed_stock.setText(f"{float(row['stock_qty']):g}")
                 self._stock_touched = False
                 break
 
@@ -293,23 +293,45 @@ class RealtimePage(WorkPage):
         self.ed_sku.clear()
         self.ed_name.clear()
         self.ed_category.clear()
-        self.sp_cost.setValue(0)
-        self.sp_price.setValue(0)
-        self.sp_stock.setValue(0)
+        self.ed_cost.clear()
+        self.ed_price.clear()
+        self.ed_stock.clear()
         self._stock_touched = False
         self.ed_sku.setFocus()
+
+    @staticmethod
+    def _parse_number(text: str, label: str) -> float:
+        raw = str(text or "").strip().replace("¥", "").replace(",", "")
+        if not raw:
+            return 0.0
+        try:
+            value = float(raw)
+        except ValueError as exc:
+            raise realtime.RealtimeError(f"{label}必须是数字") from exc
+        if value < 0:
+            raise realtime.RealtimeError(f"{label}不能为负数")
+        return value
 
     def _save_product(self) -> None:
         sku = self.ed_sku.text().strip()
         existing = any(item["sku_id"] == sku for item in self._all_inventory)
-        stock_value = self.sp_stock.value() if (not existing or self._stock_touched) else None
         try:
+            cost_value = self._parse_number(self.ed_cost.text(), "进价")
+            price_value = self._parse_number(self.ed_price.text(), "售价")
+            stock_text = self.ed_stock.text().strip()
+            stock_value = (
+                self._parse_number(stock_text, "库存")
+                if stock_text
+                else (0.0 if not existing else None)
+            )
+            if existing and not self._stock_touched:
+                stock_value = None
             row = realtime.save_product(
                 sku_id=sku,
                 sku_name=self.ed_name.text(),
                 category=self.ed_category.text(),
-                cost=self.sp_cost.value(),
-                price=self.sp_price.value(),
+                cost=cost_value,
+                price=price_value,
                 stock_qty=stock_value,
             )
         except realtime.RealtimeError as exc:
@@ -322,6 +344,9 @@ class RealtimePage(WorkPage):
             "green",
         )
         self.status.setVisible(True)
+        self.ed_cost.setText(f"{float(row['cost']):.2f}")
+        self.ed_price.setText(f"{float(row['price']):.2f}")
+        self.ed_stock.setText(f"{float(row['stock_qty']):g}")
         self._stock_touched = False
         self.refresh()
         self.data_changed.emit("realtime")
@@ -344,7 +369,7 @@ class RealtimePage(WorkPage):
             self.status.setVisible(True)
             return
         if self.ed_sku.text().strip() == sku:
-            self.sp_stock.setValue(float(result["stock_after"]))
+            self.ed_stock.setText(f"{float(result['stock_after']):g}")
             self._stock_touched = False
         style_pill(self.status, text, "green")
         self.status.setVisible(True)
@@ -381,7 +406,7 @@ class RealtimePage(WorkPage):
             "green",
         )
         if self.ed_sku.text().strip() == result["sku_id"]:
-            self.sp_stock.setValue(float(result["stock_after"]))
+            self.ed_stock.setText(f"{float(result['stock_after']):g}")
             self._stock_touched = False
         self.status.setVisible(True)
         self.ed_code.clear()
@@ -413,7 +438,7 @@ class RealtimePage(WorkPage):
             "green",
         )
         if self.ed_sku.text().strip() == result["sku_id"]:
-            self.sp_stock.setValue(float(result["stock_after"]))
+            self.ed_stock.setText(f"{float(result['stock_after']):g}")
             self._stock_touched = False
         self.status.setVisible(True)
         self.ed_code.clear()

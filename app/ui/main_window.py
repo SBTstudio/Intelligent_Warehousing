@@ -23,6 +23,8 @@ from app.llm import tasks
 from app.llm.client import get_client
 from app.paths import resource_path
 from app.ui.page_basket import BasketPage
+from app.ui.page_cashier import CashierPage
+from app.ui.page_home import HomePage
 from app.ui.page_import import ImportPage
 from app.ui.page_realtime import RealtimePage
 from app.ui.page_replenish import ReplenishPage
@@ -31,8 +33,10 @@ from app.ui.page_settings import SettingsPage
 from app.ui.theme import COLORS
 from app.ui.worker import FunctionWorker, stop_worker
 
-VERSION = "1.0.3"
+VERSION = "1.0.4"
 NAV_LABELS = [
+    "首页",
+    "收银台",
     "数据导入",
     "实时库存",
     "购物篮分析",
@@ -66,6 +70,8 @@ class MainWindow(QMainWindow):
 
         self.stack = QStackedWidget()
         self.pages = [
+            HomePage(),
+            CashierPage(),
             ImportPage(),
             RealtimePage(),
             BasketPage(),
@@ -82,15 +88,19 @@ class MainWindow(QMainWindow):
         self.nav.currentRowChanged.connect(self._change_page)
         self.nav.setCurrentRow(0)
 
-        self.import_page = self.pages[0]
-        self.realtime_page = self.pages[1]
-        self.basket_page = self.pages[2]
-        self.replenish_page = self.pages[3]
-        self.report_page = self.pages[4]
-        self.settings_page = self.pages[5]
+        self.home_page = self.pages[0]
+        self.cashier_page = self.pages[1]
+        self.import_page = self.pages[2]
+        self.realtime_page = self.pages[3]
+        self.basket_page = self.pages[4]
+        self.replenish_page = self.pages[5]
+        self.report_page = self.pages[6]
+        self.settings_page = self.pages[7]
 
+        self.home_page.navigate.connect(self._go_to)
         self.import_page.data_imported.connect(self._on_data_imported)
         self.realtime_page.data_changed.connect(self._on_data_imported)
+        self.cashier_page.sale_completed.connect(self._on_sale_completed)
         self.settings_page.config_changed.connect(self._on_config_changed)
 
         self._model_worker: FunctionWorker | None = None
@@ -117,7 +127,7 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(brand)
 
-        subtitle = QLabel("SMART WMS  ·  v1.0.3")
+        subtitle = QLabel("SMART WMS  ·  v1.0.4")
         subtitle.setStyleSheet(
             f"color: {COLORS['muted']}; font-size: 10px; padding-left: 23px;"
             "letter-spacing: 1px; background: transparent;"
@@ -162,6 +172,26 @@ class MainWindow(QMainWindow):
         self.model_label = QLabel("模型：检测中…")
         self.model_label.setStyleSheet("color: #6B6A64; padding-right: 10px;")
         bar.addPermanentWidget(self.model_label)
+
+    # ==========================================================
+    def _go_to(self, key: str) -> None:
+        mapping = {
+            "home": 0,
+            "cashier": 1,
+            "import": 2,
+            "realtime": 3,
+            "basket": 4,
+            "replenish": 5,
+            "report": 6,
+            "settings": 7,
+        }
+        index = mapping.get(key)
+        if index is not None:
+            self.nav.setCurrentRow(index)
+
+    def _on_sale_completed(self, order_id: str) -> None:
+        self._on_data_imported("cashier")
+        self.status_label.setText(f"收银完成：{order_id}，库存与分析数据已更新")
 
     # ==========================================================
     def _change_page(self, index: int) -> None:

@@ -119,3 +119,44 @@ def test_edit_metadata_without_changing_stock(temp_db):
     assert row["price"] == pytest.approx(3.0)
     # 只改档案不应产生库存调整事件
     assert all(e["action"] != realtime.ACTION_ADJUST for e in realtime.recent_events())
+
+
+def test_checkout_cart_groups_items_into_one_order(temp_db):
+    realtime.save_product("S101", "可乐", "饮料", 2, 3.5, 10, ts="2026-11-17 09:00:00")
+    realtime.save_product("S102", "薯片", "零食", 3, 6, 5, ts="2026-11-17 09:00:00")
+    result = realtime.checkout_cart(
+        [
+            {"sku_id": "S101", "qty": 2},
+            {"sku_id": "S102", "qty": 1},
+            {"sku_id": "S101", "qty": 1},
+        ],
+        ts="2026-11-17 09:01:00",
+    )
+    assert result["total"] == pytest.approx(3 * 3.5 + 6)
+    assert len(result["items"]) == 2
+    assert result["order_id"].startswith("RT20261117090100")
+
+    sales = schema.fetch_sales(since="2026-11-17")
+    assert len(sales) == 2
+    assert {row["order_id"] for row in sales} == {result["order_id"]}
+
+    inv = {row["sku_id"]: row["stock_qty"] for row in realtime.inventory_rows()}
+    assert inv["S101"] == 7.0
+    assert inv["S102"] == 4.0
+
+    events = [e for e in realtime.recent_events() if e["order_id"] == result["order_id"]]
+    assert len(events) == 2
+    assert all(e["action"] == realtime.ACTION_SALE for e in events)
+
+
+def test_checkout_cart_is_atomic_when_one_item_short(temp_db):
+    realtime.save_product("S201", "A", "测试", 1, 2, 5)
+    realtime.save_product("S202", "B", "测试", 1, 2, 1)
+    with pytest.raises(realtime.InsufficientStock):
+        realtime.checkout_cart(
+            [{"sku_id": "S201", "qty": 1}, {"sku_id": "S202", "qty": 5}]
+        )
+    # 失败时不能扣任何库存，也不能产生订单
+    inv = {row["sku_id"]: row["stock_qty"] for row in realtime.inventory_rows()}
+    assert inv["S201"] == 5.0 and inv["S202"] == 1.0
+    assert schema.fetch_sales() == []

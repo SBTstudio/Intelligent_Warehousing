@@ -431,6 +431,131 @@ def record_restock(
 
 
 # =====================================================================
+# 一笔订单结账（收银台）
+# =====================================================================
+def checkout_cart(
+    items: list[dict],
+    source: str = SOURCE_MANUAL,
+    ts: str | datetime | date | None = None,
+    order_id: str | None = None,
+) -> dict[str, Any]:
+    """把购物车中的多行商品结账成一张小票。
+
+    items: [{"sku_id": "S001", "qty": 2, "unit_price": 3.5}, ...]
+    - 同一 SKU 重复出现会合并数量；
+    - 所有商品先校验库存，任何一个不足都不会产生半张订单；
+    - 一个 order_id + 多条 transaction_items，库存和事件在同一事务内更新。
+    """
+    if not items:
+        raise RealtimeError("购物车为空，无法结账")
+
+    merged: dict[str, dict[str, Any]] = {}
+    for item in items:
+        sku = str(item.get("sku_id", "")).strip()
+        if not sku:
+            raise RealtimeError("购物车中存在空 SKU")
+        try:
+            quantity = int(item.get("qty", 1))
+        except (TypeError, ValueError) as exc:
+            raise RealtimeError(f"{sku} 的数量必须是整数") from exc
+        if quantity <= 0:
+            raise RealtimeError(f"{sku} 的数量必须大于 0")
+        if sku in merged:
+            merged[sku]["qty"] += quantity
+            if item.get("unit_price") is not None:
+                merged[sku]["unit_price"] = float(item["unit_price"])
+        else:
+            merged[sku] = {
+                "sku_id": sku,
+                "qty": quantity,
+                "unit_price": None
+                if item.get("unit_price") is None
+                else float(item["unit_price"]),
+            }
+
+    ts_text = _now(ts)
+    source_value = _source(source)
+    items_out: list[dict[str, Any]] = []
+
+    with schema.get_conn() as conn:
+        order = str(order_id or "").strip() or _new_order_id(conn, ts_text)
+        if conn.execute(
+            "SELECT 1 FROM transactions WHERE order_id = ?", (order,)
+        ).fetchone():
+            raise RealtimeError(f"订单号 {order} 已存在，请重新结账")
+
+        total = 0.0
+        for line in merged.values():
+            sku = line["sku_id"]
+            product = _product(conn, sku)
+            if product is None:
+                raise ProductNotFound(f"商品 {sku} 不存在")
+            current = _latest_stock(conn, sku)
+            current_value = 0.0 if current is None else current
+            if current_value + 1e-9 < line["qty"]:
+                raise InsufficientStock(
+                    f"{product['sku_name'] or sku} 库存不足：当前 {current_value:g}，"
+                    f"需要 {line['qty']}"
+                )
+            price = (
+                float(product["price"])
+                if line["unit_price"] is None
+                else float(line["unit_price"])
+            )
+            if price < 0:
+                raise RealtimeError(f"{sku} 的成交单价不能为负数")
+            subtotal = price * line["qty"]
+            total += subtotal
+            items_out.append(
+                {
+                    "sku_id": sku,
+                    "sku_name": product["sku_name"],
+                    "qty": line["qty"],
+                    "unit_price": price,
+                    "subtotal": subtotal,
+                    "stock_before": current_value,
+                }
+            )
+
+        conn.execute(
+            "INSERT INTO transactions (order_id, ts, total_amount) VALUES (?, ?, ?)",
+            (order, ts_text, round(total, 2)),
+        )
+        for line in items_out:
+            conn.execute(
+                "INSERT INTO transaction_items "
+                "(order_id, sku_id, qty, unit_price) VALUES (?, ?, ?, ?)",
+                (order, line["sku_id"], line["qty"], line["unit_price"]),
+            )
+            new_stock = line["stock_before"] - line["qty"]
+            product = _product(conn, line["sku_id"])
+            cost = 0.0 if product is None else float(product["cost"])
+            _write_stock(conn, line["sku_id"], new_stock, ts_text, cost)
+            _log_event(
+                conn,
+                sku_id=line["sku_id"],
+                ts=ts_text,
+                action=ACTION_SALE,
+                delta=-line["qty"],
+                stock_after=new_stock,
+                unit_price=line["unit_price"],
+                cost=cost,
+                source=source_value,
+                order_id=order,
+                note="收银台结账",
+            )
+            line["stock_after"] = new_stock
+
+    return {
+        "order_id": order,
+        "ts": ts_text,
+        "source": source_value,
+        "items": items_out,
+        "total": round(total, 2),
+    }
+
+
+# =====================================================================
 # 扫码 / NFC 扩展点
 # =====================================================================
 _CODE_RESOLVERS: dict[str, Callable[[str], str | None]] = {}

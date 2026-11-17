@@ -184,3 +184,29 @@ def test_judge_best_seller():
         sku_id="S1", abc_class="A", xyz_class="X", turnover_days=5.0
     )
     assert classify.judge(p, slow_turnover_days=45) == "畅销"
+
+
+def test_suggestion_date_uses_today_not_receipt_date():
+    """补货日以调用当天为基准，不沿用旧小票日期。"""
+    s = replenish.build_suggestion(
+        sku_id="X3",
+        sku_name="测试",
+        stock_qty=5.0,
+        values=[10.0] * 30,
+        lead_time_days=3,
+        today=date(2026, 11, 17),
+    )
+    assert s.suggest_date == date(2026, 11, 17)
+    assert s.overdue is True
+
+
+def test_build_all_suggestions_accepts_today():
+    records = [
+        {"sku_id": "OLD1", "qty": 2, "date": "2020-01-01", "unit_price": 1.0}
+        for _ in range(20)
+    ]
+    inventory = [{"sku_id": "OLD1", "sku_name": "旧数据", "stock_qty": 1}]
+    result = replenish.build_all_suggestions(
+        records, inventory, lead_time_days=3, today=date(2026, 11, 17)
+    )
+    assert result[0].suggest_date == date(2026, 11, 17)

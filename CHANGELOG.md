@@ -3,6 +3,30 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.0.4] - 2026-11-17
+
+新增收银台、首页指南，修正补货日期基准。
+
+### Added
+
+- 新增「收银台」页：
+  - 多次扫码/手输加入同一张小票；
+  - 同一 SKU 自动合并数量；
+  - 点「结账」生成一个 order_id + 多条 transaction_items；
+  - 库存不足整单拒绝，不产生半张订单。
+- `realtime.checkout_cart()`：购物车整单事务结账。
+- 新增「首页」：
+  - 商品数 / 库存总量 / 累计订单 / 库存变动统计；
+  - 收银台、实时库存、数据导入快捷入口；
+  - 「查看精简版使用指南」弹窗。
+- 新增 2 个结账测试、2 个补货日期测试，测试总数 73。
+
+### Changed
+
+- 「实时库存」进价/售价/库存输入框改为空白占位提示，不再写死 0.00。
+- 补货建议日以打开软件当天为基准；已过期日期落到今天并标记「需补货（已逾期）」。
+- 版本号更新到 v1.0.4。
+
 ## [1.0.3] - 2026-11-13
 
 新增实时库存 / 收银辅助与中文空白模板。
@@ -134,6 +158,7 @@
 - 暂未打包 exe / dmg。
 - 示例数据日销量波动较大，XYZ 分类多为 Z；文档中已说明。
 
+[1.0.4]: https://github.com/SBTstudio/Intelligent_Warehousing/releases/tag/v1.0.4
 [1.0.3]: https://github.com/SBTstudio/Intelligent_Warehousing/releases/tag/v1.0.3
 [1.0.2]: https://github.com/SBTstudio/Intelligent_Warehousing/releases/tag/v1.0.2
 [1.0.1]: https://github.com/SBTstudio/Intelligent_Warehousing/releases/tag/v1.0.1
