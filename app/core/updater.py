@@ -90,13 +90,43 @@ def asset_for_platform(assets: list[dict], platform: str | None = None) -> dict 
     return None
 
 
+def _http_get(
+    url: str,
+    *,
+    headers: dict[str, str],
+    timeout: int,
+    stream: bool = False,
+):
+    """GET GitHub，并在代理/限流异常时尝试直连。"""
+    first_error: Exception | None = None
+    try:
+        response = requests.get(
+            url, headers=headers, timeout=timeout, stream=stream, allow_redirects=True
+        )
+        if response.status_code not in (403, 407):
+            return response
+        response.close()
+    except requests.RequestException as exc:
+        first_error = exc
+
+    # 某些代理出口会被 GitHub 判定为限流（403）；直连通常可用。
+    session = requests.Session()
+    session.trust_env = False
+    try:
+        return session.get(
+            url, headers=headers, timeout=timeout, stream=stream, allow_redirects=True
+        )
+    except requests.RequestException as exc:
+        raise exc from first_error
+
+
 def check_for_update(
     current: str = APP_VERSION,
     timeout: int = 12,
 ) -> UpdateInfo:
     """查询 GitHub 最新 Release。始终返回 UpdateInfo，has_update 表示是否更新。"""
     try:
-        response = requests.get(
+        response = _http_get(
             API_LATEST,
             headers={
                 "Accept": "application/vnd.github+json",
@@ -173,9 +203,10 @@ def download_update(
         if "api.github.com" in url:
             headers["Accept"] = "application/octet-stream"
         try:
-            with requests.get(
-                url, headers=headers, stream=True, timeout=timeout, allow_redirects=True
-            ) as response:
+            response = _http_get(
+                url, headers=headers, timeout=timeout, stream=True
+            )
+            try:
                 response.raise_for_status()
                 total = int(response.headers.get("Content-Length") or info.asset_size or 0)
                 downloaded = 0
@@ -189,6 +220,10 @@ def download_update(
                         downloaded += len(chunk)
                         if progress:
                             progress(downloaded, total)
+            finally:
+                close = getattr(response, "close", None)
+                if close is not None:
+                    close()
             if info.asset_size and part.stat().st_size != info.asset_size:
                 raise UpdateError("下载文件大小与 Release 不一致")
             part.replace(target)
